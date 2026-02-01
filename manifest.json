@@ -1,0 +1,11 @@
+{
+  "name": "Helixis Copilot (MVP)",
+  "description": "Side panel copilot that can read page context.",
+  "version": "0.0.1",
+  "manifest_version": 3,
+  "permissions": ["tabs", "activeTab", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "service_worker.js" },
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Helixis Copilot" }
+}

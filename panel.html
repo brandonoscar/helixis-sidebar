@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Helixis Copilot</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 12px; }
+    textarea { width: 100%; height: 90px; }
+    button { width: 100%; padding: 10px; margin-top: 8px; }
+    pre { white-space: pre-wrap; background: #f3f3f3; padding: 8px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h3>Helixis Copilot</h3>
+  <div><b>Current Tab:</b> <span id="tabUrl">...</span></div>
+  <textarea id="question" placeholder="What do you want to do on this page?"></textarea>
+  <button id="btn">Get Page Context</button>
+  <pre id="out">...</pre>
+  <script src="panel.js"></script>
+</body>
+</html>
