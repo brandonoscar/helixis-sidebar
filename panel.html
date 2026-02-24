@@ -1,22 +1,160 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Helixis Copilot</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 12px; }
-    textarea { width: 100%; height: 90px; }
-    button { width: 100%; padding: 10px; margin-top: 8px; }
-    pre { white-space: pre-wrap; background: #f3f3f3; padding: 8px; border-radius: 6px; }
-  </style>
+  <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
-  <h3>Helixis Copilot</h3>
-  <div><b>Current Tab:</b> <span id="tabUrl">...</span></div>
-  <textarea id="question" placeholder="What do you want to do on this page?"></textarea>
-  <button id="btn">Get Page Context</button>
-  <pre id="out">...</pre>
+
+  <!-- ── HEADER ─────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 1.5L10.5 6L6 10.5L1.5 6Z" fill="white" fill-opacity="0.95"/>
+        </svg>
+      </div>
+      <span class="header-title">Helixis Copilot</span>
+    </div>
+    <div class="status-pill">
+      <span class="status-dot"></span>
+      Ready
+    </div>
+  </header>
+
+  <!-- ── CONTEXT STRIP ──────────────────────────────── -->
+  <div class="context-strip">
+    <div class="context-label">Active Context</div>
+    <div class="context-value">
+      <div class="context-favicon">
+        <svg viewBox="0 0 8 8" fill="none">
+          <circle cx="4" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+      </div>
+      <span class="context-url is-empty" id="contextDisplay">No active context</span>
+    </div>
+  </div>
+
+  <!-- ── MAIN ───────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Primary Action Card -->
+    <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
+      <div class="card-body">
+        <div class="card-header-row">
+          <div class="card-icon card-icon-primary">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="card-text">
+            <div class="card-title">Read Page Context</div>
+            <div class="card-desc">Extract visible text content from the active tab.</div>
+          </div>
+          <div class="card-badge">Primary</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Card -->
+    <div class="card loading-card" id="loadingCard">
+      <div class="spinner"></div>
+      Reading page content…
+    </div>
+
+    <!-- Output Card -->
+    <div class="card output-card" id="outputCard">
+      <div class="output-header">
+        <span class="output-label">Page Context</span>
+        <button class="output-close" id="outputClose" title="Clear output">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="output-body" id="outputBody"></div>
+    </div>
+
+    <!-- Secondary Action Grid -->
+    <div class="cards-grid">
+
+      <div class="card card-sm card-disabled">
+        <div class="card-body">
+          <div class="card-icon card-icon-secondary">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="card-title">Summarize</div>
+          <div class="card-desc">AI summary of page</div>
+        </div>
+      </div>
+
+      <div class="card card-sm card-disabled">
+        <div class="card-body">
+          <div class="card-icon card-icon-secondary">
+            <svg viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M8 5.5v3l1.75 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="card-title">Analyze</div>
+          <div class="card-desc">Deep page analysis</div>
+        </div>
+      </div>
+
+      <div class="card card-sm card-disabled">
+        <div class="card-body">
+          <div class="card-icon card-icon-secondary">
+            <svg viewBox="0 0 16 16" fill="none">
+              <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="card-title">Draft Reply</div>
+          <div class="card-desc">Compose a response</div>
+        </div>
+      </div>
+
+      <div class="card card-sm card-disabled">
+        <div class="card-body">
+          <div class="card-icon card-icon-secondary">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="card-title">Actions</div>
+          <div class="card-desc">Run page actions</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">
+        <svg viewBox="0 0 18 18" fill="none">
+          <path d="M9 3v9M5.5 8.5L9 12l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 14.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+        </svg>
+      </div>
+      <div class="empty-title">Nothing here yet</div>
+      <div class="empty-desc">Click "Read Page Context" above to pull content from the active tab.</div>
+    </div>
+
+  </main>
+
+  <!-- ── FOOTER ─────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="footer-status">
+      <div class="footer-dot"></div>
+      Connected · Ready
+    </div>
+    <span class="footer-version">v0.0.1</span>
+  </footer>
+
   <script src="panel.js"></script>
 </body>
 </html>
