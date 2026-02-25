@@ -24,137 +24,254 @@
     </div>
   </header>
 
-  <!-- ── CONTEXT STRIP ──────────────────────────────── -->
-  <div class="context-strip">
-    <div class="context-label">Active Context</div>
-    <div class="context-value">
-      <div class="context-favicon">
-        <svg viewBox="0 0 8 8" fill="none">
-          <circle cx="4" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/>
-        </svg>
-      </div>
-      <span class="context-url is-empty" id="contextDisplay">No active context</span>
-    </div>
-  </div>
+  <!-- ── TAB BAR ────────────────────────────────────── -->
+  <nav class="tabs" role="tablist" aria-label="Main navigation">
+    <button class="tab active" data-tab="copilot"   role="tab" aria-selected="true">Copilot</button>
+    <button class="tab"        data-tab="reminders" role="tab" aria-selected="false">Reminders</button>
+    <button class="tab"        data-tab="tasks"     role="tab" aria-selected="false">Tasks</button>
+    <button class="tab"        data-tab="settings"  role="tab" aria-selected="false">⚙ Settings</button>
+  </nav>
 
-  <!-- ── MAIN ───────────────────────────────────────── -->
-  <main class="main">
+  <!-- ── CONTENT ────────────────────────────────────── -->
+  <div class="content">
 
-    <!-- Primary Action Card -->
-    <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
-      <div class="card-body">
-        <div class="card-header-row">
-          <div class="card-icon card-icon-primary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- ── COPILOT TAB ────────────────────────────────── -->
+    <section id="tab-copilot" class="tab-panel active">
+
+      <!-- CONTEXT STRIP -->
+      <div class="context-strip">
+        <div class="context-label">Active Context</div>
+        <div class="context-value">
+          <div class="context-favicon">
+            <svg viewBox="0 0 8 8" fill="none">
+              <circle cx="4" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/>
             </svg>
           </div>
-          <div class="card-text">
-            <div class="card-title">Read Page Context</div>
-            <div class="card-desc">Extract visible text content from the active tab.</div>
-          </div>
-          <div class="card-badge">Primary</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading Card -->
-    <div class="card loading-card" id="loadingCard">
-      <div class="spinner"></div>
-      Reading page content…
-    </div>
-
-    <!-- Output Card -->
-    <div class="card output-card" id="outputCard">
-      <div class="output-header">
-        <span class="output-label">Page Context</span>
-        <button class="output-close" id="outputClose" title="Clear output">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </button>
-      </div>
-      <div class="output-body" id="outputBody"></div>
-    </div>
-
-    <!-- Secondary Action Grid -->
-    <div class="cards-grid">
-
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="card-title">Summarize</div>
-          <div class="card-desc">AI summary of page</div>
+          <span class="context-url is-empty" id="contextDisplay">No active context</span>
         </div>
       </div>
 
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M8 5.5v3l1.75 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- CARDS -->
+      <main class="main">
+
+        <!-- Primary Action Card -->
+        <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
+          <div class="card-body">
+            <div class="card-header-row">
+              <div class="card-icon card-icon-primary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="card-text">
+                <div class="card-title">Read Page Context</div>
+                <div class="card-desc">Extract visible text content from the active tab.</div>
+              </div>
+              <div class="card-badge">Primary</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading Card -->
+        <div class="card loading-card" id="loadingCard">
+          <div class="spinner"></div>
+          Reading page content…
+        </div>
+
+        <!-- Output Card -->
+        <div class="card output-card" id="outputCard">
+          <div class="output-header">
+            <span class="output-label">Page Context</span>
+            <button class="output-close" id="outputClose" title="Clear output">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="output-body" id="outputBody"></div>
+        </div>
+
+        <!-- Secondary Action Grid -->
+        <div class="cards-grid">
+
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Summarize</div>
+              <div class="card-desc">AI summary of page</div>
+            </div>
+          </div>
+
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M8 5.5v3l1.75 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Analyze</div>
+              <div class="card-desc">Deep page analysis</div>
+            </div>
+          </div>
+
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Draft Reply</div>
+              <div class="card-desc">Compose a response</div>
+            </div>
+          </div>
+
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Actions</div>
+              <div class="card-desc">Run page actions</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">
+            <svg viewBox="0 0 18 18" fill="none">
+              <path d="M9 3v9M5.5 8.5L9 12l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M3 14.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
             </svg>
           </div>
-          <div class="card-title">Analyze</div>
-          <div class="card-desc">Deep page analysis</div>
+          <div class="empty-title">Nothing here yet</div>
+          <div class="empty-desc">Click "Read Page Context" above to pull content from the active tab.</div>
         </div>
-      </div>
 
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
+      </main>
+
+      <footer class="footer">
+        <div class="footer-status">
+          <div class="footer-dot"></div>
+          Connected · Ready
+        </div>
+        <span class="footer-version">v0.1.0</span>
+      </footer>
+
+    </section>
+
+    <!-- ── REMINDERS TAB ─────────────────────────────── -->
+    <section id="tab-reminders" class="tab-panel">
+      <div class="list-header">
+        <span class="list-title">Reminders</span>
+        <button class="btn btn-ghost btn-sm" id="btnRefreshReminders">Refresh</button>
+      </div>
+      <ul class="event-list" id="remindersList" role="list">
+        <li class="empty">No reminders yet.</li>
+      </ul>
+    </section>
+
+    <!-- ── TASKS TAB ──────────────────────────────────── -->
+    <section id="tab-tasks" class="tab-panel">
+      <div class="list-header">
+        <span class="list-title">Tasks</span>
+        <button class="btn btn-ghost btn-sm" id="btnRefreshTasks">Refresh</button>
+      </div>
+      <ul class="event-list" id="tasksList" role="list">
+        <li class="empty">No tasks yet.</li>
+      </ul>
+    </section>
+
+    <!-- ── SETTINGS TAB ───────────────────────────────── -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="settings-body">
+
+        <!-- Helixis Cloud -->
+        <div class="section-label">Helixis Cloud</div>
+
+        <div class="field">
+          <label for="apiKeyInput">API Key</label>
+          <div class="input-row">
+            <input
+              type="password"
+              id="apiKeyInput"
+              placeholder="Enter API key…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="btn btn-ghost btn-sm" id="btnToggleKey" type="button">Show</button>
           </div>
-          <div class="card-title">Draft Reply</div>
-          <div class="card-desc">Compose a response</div>
+          <div class="key-status not-configured" id="keyStatus">○ Not configured</div>
+          <p class="security-note">
+            🔒 Key is passed directly to the background worker and written to
+            <code>chrome.storage.local</code>. It is never accessible from page
+            scripts or the panel after saving.
+          </p>
         </div>
-      </div>
 
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+        <div class="field">
+          <label for="channelUrl">Event Channel URL</label>
+          <input
+            type="text"
+            id="channelUrl"
+            value="ws://localhost:8765/events"
+            placeholder="ws://localhost:8765/events"
+            spellcheck="false"
+          />
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Connectors -->
+        <div class="section-label">Connectors</div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Helixis Cloud</div>
+            <div class="toggle-sublabel">Real-time tasks &amp; messages</div>
           </div>
-          <div class="card-title">Actions</div>
-          <div class="card-desc">Run page actions</div>
+          <label class="toggle" title="Enable Helixis Cloud connector">
+            <input type="checkbox" id="toggleHelixis" />
+            <span class="toggle-slider"></span>
+          </label>
         </div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Buildium</div>
+            <div class="toggle-sublabel">Coming soon</div>
+          </div>
+          <label class="toggle" title="Buildium connector (coming soon)">
+            <input type="checkbox" id="toggleBuildium" disabled />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Actions -->
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnSaveSettings"   type="button">Save Settings</button>
+          <button class="btn btn-ghost"   id="btnTestConnection" type="button">Test Connection</button>
+        </div>
+
+        <div class="settings-status" id="settingsStatus" role="status" aria-live="polite"></div>
+
       </div>
+    </section>
 
-    </div>
+  </div><!-- .content -->
 
-    <!-- Empty State -->
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon">
-        <svg viewBox="0 0 18 18" fill="none">
-          <path d="M9 3v9M5.5 8.5L9 12l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3 14.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
-        </svg>
-      </div>
-      <div class="empty-title">Nothing here yet</div>
-      <div class="empty-desc">Click "Read Page Context" above to pull content from the active tab.</div>
-    </div>
-
-  </main>
-
-  <!-- ── FOOTER ─────────────────────────────────────── -->
-  <footer class="footer">
-    <div class="footer-status">
-      <div class="footer-dot"></div>
-      Connected · Ready
-    </div>
-    <span class="footer-version">v0.0.1</span>
-  </footer>
-
-  <script src="panel.js"></script>
+  <script type="module" src="panel.js"></script>
 </body>
 </html>
