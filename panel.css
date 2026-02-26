@@ -98,6 +98,39 @@ body {
   letter-spacing: -0.015em;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-gear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--ease), color var(--ease);
+}
+
+.header-gear:hover {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+}
+
+.header-gear.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.header-gear svg { width: 14px; height: 14px; }
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -140,6 +173,7 @@ body {
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   padding: 0 4px;
+  overflow: hidden;
 }
 
 .tab {

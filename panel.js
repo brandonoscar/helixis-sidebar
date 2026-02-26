@@ -53,12 +53,18 @@ function switchTab(tabId) {
   });
   tabPanels.forEach((panel) => panel.classList.toggle('active', panel.id === `tab-${tabId}`));
 
+  // Keep header gear icon highlighted when Settings is active
+  document.getElementById('btnHeaderSettings')?.classList.toggle('active', tabId === 'settings');
+
   if (tabId === 'settings')  loadSettingsStatus();
   if (tabId === 'reminders') loadReminders();
   if (tabId === 'tasks')     loadTasks();
 }
 
 tabButtons.forEach((btn) => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+// Header gear icon → Settings shortcut
+document.getElementById('btnHeaderSettings').addEventListener('click', () => switchTab('settings'));
 
 // ─── Copilot: Context + URL Guard ────────────────────────────────────────────
 
