@@ -18,16 +18,20 @@
       </div>
       <span class="header-title">Helixis Copilot</span>
     </div>
-    <div class="status-pill">
+    <!-- Status pill — JS swaps class/text for Demo mode -->
+    <div class="status-pill" id="statusPill">
       <span class="status-dot"></span>
-      Ready
+      <span id="statusText">Ready</span>
     </div>
   </header>
 
   <!-- ── TAB BAR ────────────────────────────────────── -->
   <nav class="tabs" role="tablist" aria-label="Main navigation">
     <button class="tab active" data-tab="copilot"   role="tab" aria-selected="true">Copilot</button>
-    <button class="tab"        data-tab="reminders" role="tab" aria-selected="false">Reminders</button>
+    <button class="tab"        data-tab="reminders" role="tab" aria-selected="false">
+      Reminders
+      <span class="tab-badge" id="remindersBadge" hidden>0</span>
+    </button>
     <button class="tab"        data-tab="tasks"     role="tab" aria-selected="false">Tasks</button>
     <button class="tab"        data-tab="settings"  role="tab" aria-selected="false">⚙ Settings</button>
   </nav>
@@ -35,10 +39,12 @@
   <!-- ── CONTENT ────────────────────────────────────── -->
   <div class="content">
 
-    <!-- ── COPILOT TAB ────────────────────────────────── -->
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  COPILOT TAB                                   -->
+    <!-- ══════════════════════════════════════════════ -->
     <section id="tab-copilot" class="tab-panel active">
 
-      <!-- CONTEXT STRIP -->
+      <!-- Context strip -->
       <div class="context-strip">
         <div class="context-label">Active Context</div>
         <div class="context-value">
@@ -51,10 +57,19 @@
         </div>
       </div>
 
-      <!-- CARDS -->
+      <!-- Restricted-URL notice (hidden by default) -->
+      <div class="notice-strip" id="copilotNotice" hidden>
+        <svg viewBox="0 0 14 14" fill="none">
+          <path d="M7 1.5L12.5 11H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M7 5.5v3M7 10h.01" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="copilotNoticeText">Can't capture from browser internal pages. Open a normal website tab.</span>
+      </div>
+
+      <!-- Cards -->
       <main class="main">
 
-        <!-- Primary Action Card -->
+        <!-- Primary: Read Page Context -->
         <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
           <div class="card-body">
             <div class="card-header-row">
@@ -72,17 +87,17 @@
           </div>
         </div>
 
-        <!-- Loading Card -->
+        <!-- Loading card (shared) -->
         <div class="card loading-card" id="loadingCard">
           <div class="spinner"></div>
-          Reading page content…
+          Working…
         </div>
 
-        <!-- Output Card -->
+        <!-- Output card (page context result) -->
         <div class="card output-card" id="outputCard">
           <div class="output-header">
             <span class="output-label">Page Context</span>
-            <button class="output-close" id="outputClose" title="Clear output">
+            <button class="output-close" id="outputClose" title="Clear">
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
               </svg>
@@ -91,9 +106,43 @@
           <div class="output-body" id="outputBody"></div>
         </div>
 
-        <!-- Secondary Action Grid -->
+        <!-- Selection card (saved selection result) -->
+        <div class="card selection-card" id="selectionCard">
+          <div class="selection-header">
+            <span class="selection-label">Saved Selection</span>
+            <button class="output-close" id="selectionClose" title="Clear selection">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="selection-body">
+            <div class="selection-quote" id="selectionText"></div>
+            <div class="selection-source" id="selectionSource"></div>
+            <div class="selection-actions">
+              <button class="btn btn-ghost btn-sm" id="btnAddSelectionAsReminder">+ Add as Reminder</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Secondary grid -->
         <div class="cards-grid">
 
+          <!-- Save Selection — ENABLED -->
+          <div class="card card-sm" id="cardSaveSelection" role="button" tabindex="0" aria-label="Save selected text">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M3 4.5h2.5v3H3zM3 9.5h2.5v3H3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+                  <path d="M7.5 6h5M7.5 11h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Save Selection</div>
+              <div class="card-desc">Capture selected text</div>
+            </div>
+          </div>
+
+          <!-- Summarize — disabled -->
           <div class="card card-sm card-disabled">
             <div class="card-body">
               <div class="card-icon card-icon-secondary">
@@ -102,23 +151,11 @@
                 </svg>
               </div>
               <div class="card-title">Summarize</div>
-              <div class="card-desc">AI summary of page</div>
+              <div class="card-desc">AI summary</div>
             </div>
           </div>
 
-          <div class="card card-sm card-disabled">
-            <div class="card-body">
-              <div class="card-icon card-icon-secondary">
-                <svg viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M8 5.5v3l1.75 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-              <div class="card-title">Analyze</div>
-              <div class="card-desc">Deep page analysis</div>
-            </div>
-          </div>
-
+          <!-- Draft Reply — disabled -->
           <div class="card card-sm card-disabled">
             <div class="card-body">
               <div class="card-icon card-icon-secondary">
@@ -128,10 +165,11 @@
                 </svg>
               </div>
               <div class="card-title">Draft Reply</div>
-              <div class="card-desc">Compose a response</div>
+              <div class="card-desc">Compose response</div>
             </div>
           </div>
 
+          <!-- Actions — disabled -->
           <div class="card card-sm card-disabled">
             <div class="card-body">
               <div class="card-icon card-icon-secondary">
@@ -146,7 +184,7 @@
 
         </div>
 
-        <!-- Empty State -->
+        <!-- Empty state -->
         <div class="empty-state" id="emptyState">
           <div class="empty-icon">
             <svg viewBox="0 0 18 18" fill="none">
@@ -155,7 +193,7 @@
             </svg>
           </div>
           <div class="empty-title">Nothing here yet</div>
-          <div class="empty-desc">Click "Read Page Context" above to pull content from the active tab.</div>
+          <div class="empty-desc">Click "Read Page Context" or select text on the page and click "Save Selection".</div>
         </div>
 
       </main>
@@ -165,23 +203,38 @@
           <div class="footer-dot"></div>
           Connected · Ready
         </div>
-        <span class="footer-version">v0.1.0</span>
+        <span class="footer-version">v0.2.0</span>
       </footer>
 
     </section>
 
-    <!-- ── REMINDERS TAB ─────────────────────────────── -->
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  REMINDERS TAB                                 -->
+    <!-- ══════════════════════════════════════════════ -->
     <section id="tab-reminders" class="tab-panel">
-      <div class="list-header">
-        <span class="list-title">Reminders</span>
-        <button class="btn btn-ghost btn-sm" id="btnRefreshReminders">Refresh</button>
+
+      <!-- Compose -->
+      <div class="reminder-compose">
+        <input
+          type="text"
+          id="reminderInput"
+          placeholder="Add a reminder and press Enter…"
+          maxlength="200"
+          autocomplete="off"
+        />
+        <button class="btn btn-primary btn-sm" id="btnAddReminder" type="button">Add</button>
       </div>
-      <ul class="event-list" id="remindersList" role="list">
-        <li class="empty">No reminders yet.</li>
+
+      <!-- List (populated by JS) -->
+      <ul class="reminder-list" id="reminderList" role="list">
+        <!-- Empty state injected by JS on first load -->
       </ul>
+
     </section>
 
-    <!-- ── TASKS TAB ──────────────────────────────────── -->
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  TASKS TAB                                     -->
+    <!-- ══════════════════════════════════════════════ -->
     <section id="tab-tasks" class="tab-panel">
       <div class="list-header">
         <span class="list-title">Tasks</span>
@@ -192,42 +245,31 @@
       </ul>
     </section>
 
-    <!-- ── SETTINGS TAB ───────────────────────────────── -->
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  SETTINGS TAB                                  -->
+    <!-- ══════════════════════════════════════════════ -->
     <section id="tab-settings" class="tab-panel">
       <div class="settings-body">
 
-        <!-- Helixis Cloud -->
+        <!-- Helixis Cloud credentials -->
         <div class="section-label">Helixis Cloud</div>
 
         <div class="field">
           <label for="apiKeyInput">API Key</label>
           <div class="input-row">
-            <input
-              type="password"
-              id="apiKeyInput"
-              placeholder="Enter API key…"
-              autocomplete="off"
-              spellcheck="false"
-            />
+            <input type="password" id="apiKeyInput" placeholder="Enter API key…" autocomplete="off" spellcheck="false"/>
             <button class="btn btn-ghost btn-sm" id="btnToggleKey" type="button">Show</button>
           </div>
           <div class="key-status not-configured" id="keyStatus">○ Not configured</div>
           <p class="security-note">
             🔒 Key is passed directly to the background worker and written to
-            <code>chrome.storage.local</code>. It is never accessible from page
-            scripts or the panel after saving.
+            <code>chrome.storage.local</code>. It is never accessible from page scripts or the panel after saving.
           </p>
         </div>
 
         <div class="field">
           <label for="channelUrl">Event Channel URL</label>
-          <input
-            type="text"
-            id="channelUrl"
-            value="ws://localhost:8765/events"
-            placeholder="ws://localhost:8765/events"
-            spellcheck="false"
-          />
+          <input type="text" id="channelUrl" value="ws://localhost:8765/events" placeholder="ws://localhost:8765/events" spellcheck="false"/>
         </div>
 
         <div class="divider"></div>
@@ -241,7 +283,7 @@
             <div class="toggle-sublabel">Real-time tasks &amp; messages</div>
           </div>
           <label class="toggle" title="Enable Helixis Cloud connector">
-            <input type="checkbox" id="toggleHelixis" />
+            <input type="checkbox" id="toggleHelixis"/>
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -252,7 +294,23 @@
             <div class="toggle-sublabel">Coming soon</div>
           </div>
           <label class="toggle" title="Buildium connector (coming soon)">
-            <input type="checkbox" id="toggleBuildium" disabled />
+            <input type="checkbox" id="toggleBuildium" disabled/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Developer / Demo -->
+        <div class="section-label">Developer</div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Demo Mode</div>
+            <div class="toggle-sublabel">Preload sample data for demos</div>
+          </div>
+          <label class="toggle" title="Enable demo mode">
+            <input type="checkbox" id="toggleDemoMode"/>
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -271,6 +329,9 @@
     </section>
 
   </div><!-- .content -->
+
+  <!-- Global toast (outside tab panels, fixed position) -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="panel.js"></script>
 </body>

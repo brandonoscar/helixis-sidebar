@@ -15,7 +15,7 @@ import { messaging as platformMessaging } from '../platform/extension.js';
 /** All valid message types exchanged between panel and service worker. */
 export const MSG = Object.freeze({
   // ── Settings ──────────────────────────────────────────────────────────────
-  /** Save connector settings (API keys, toggles, channel URL). */
+  /** Save connector settings (API keys, toggles, channel URL, demo mode). */
   SAVE_SETTINGS:        'SAVE_SETTINGS',
 
   /** Query current settings STATUS — panel receives booleans, never raw keys. */
@@ -38,6 +38,29 @@ export const MSG = Object.freeze({
 
   /** Wipe the stored event log. */
   CLEAR_EVENTS:         'CLEAR_EVENTS',
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+  /** Save captured page selection text. */
+  SAVE_SELECTION:       'SAVE_SELECTION',
+
+  /** Retrieve the last saved selection. */
+  GET_SELECTION:        'GET_SELECTION',
+
+  /** Clear the saved selection. */
+  CLEAR_SELECTION:      'CLEAR_SELECTION',
+
+  // ── Reminders ─────────────────────────────────────────────────────────────
+  /** Retrieve full reminders list. */
+  GET_REMINDERS:        'GET_REMINDERS',
+
+  /** Create a new reminder. */
+  CREATE_REMINDER:      'CREATE_REMINDER',
+
+  /** Update an existing reminder (done, snooze, text). */
+  UPDATE_REMINDER:      'UPDATE_REMINDER',
+
+  /** Permanently delete a reminder. */
+  DELETE_REMINDER:      'DELETE_REMINDER',
 
   // ── Push (SW → panel) ─────────────────────────────────────────────────────
   /** Service worker broadcasts this when a real-time channel event arrives. */
