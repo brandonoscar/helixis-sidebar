@@ -547,6 +547,90 @@ function setSettingsStatus(msg, type = 'info') {
   el.className   = `settings-status ${type}`;
 }
 
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+const chatInput   = document.getElementById('chatInput');
+const btnChatSend = document.getElementById('btnChatSend');
+const copilotMain = document.getElementById('copilotMain');
+
+// Auto-resize textarea as user types; enable/disable send button
+chatInput.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 108) + 'px';
+  btnChatSend.disabled = chatInput.value.trim() === '';
+});
+
+// Enter sends, Shift+Enter inserts newline
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!btnChatSend.disabled) sendChat();
+  }
+});
+
+btnChatSend.addEventListener('click', sendChat);
+
+function appendChatMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = `chat-message chat-${role}`;
+  if (role === 'assistant') {
+    div.innerHTML = `
+      <div class="chat-avatar">H</div>
+      <div class="chat-bubble">${esc(text)}</div>`;
+  } else {
+    div.innerHTML = `<div class="chat-bubble">${esc(text)}</div>`;
+  }
+  copilotMain.appendChild(div);
+  copilotMain.scrollTop = copilotMain.scrollHeight;
+  return div;
+}
+
+function appendChatTyping() {
+  const div = document.createElement('div');
+  div.className = 'chat-message chat-assistant';
+  div.innerHTML = `
+    <div class="chat-avatar">H</div>
+    <div class="chat-bubble">
+      <div class="chat-typing">
+        <div class="chat-typing-dot"></div>
+        <div class="chat-typing-dot"></div>
+        <div class="chat-typing-dot"></div>
+      </div>
+    </div>`;
+  copilotMain.appendChild(div);
+  copilotMain.scrollTop = copilotMain.scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  // Reset input
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  btnChatSend.disabled = true;
+
+  // Show user bubble
+  appendChatMessage('user', text);
+
+  // Show typing indicator then stub reply
+  const typingEl = appendChatTyping();
+  await new Promise((r) => setTimeout(r, 700));
+  typingEl.remove();
+
+  try {
+    const status = await sendToWorker(MSG.GET_SETTINGS_STATUS);
+    if (status.helixisKeyConfigured) {
+      appendChatMessage('assistant', 'Your message was received. AI responses are coming soon — the Helixis API will handle this once the chat endpoint is connected.');
+    } else {
+      appendChatMessage('assistant', 'Copilot AI is not yet connected. Add your Helixis API key in ⚙ Settings to enable AI responses.');
+    }
+  } catch {
+    appendChatMessage('assistant', 'Could not reach the background worker. Try reloading the extension.');
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 refreshContext();

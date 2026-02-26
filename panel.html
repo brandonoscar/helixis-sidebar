@@ -74,8 +74,8 @@
         <span id="copilotNoticeText">Can't capture from browser internal pages. Open a normal website tab.</span>
       </div>
 
-      <!-- Cards -->
-      <main class="main">
+      <!-- Cards + Chat messages -->
+      <main class="main" id="copilotMain">
 
         <!-- Primary: Read Page Context -->
         <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
@@ -205,6 +205,26 @@
         </div>
 
       </main>
+
+      <!-- Chat bar — sticky at bottom of Copilot tab -->
+      <div class="chat-bar" id="chatBar">
+        <div class="chat-input-wrap">
+          <textarea
+            id="chatInput"
+            class="chat-input"
+            placeholder="Message Copilot…"
+            rows="1"
+            maxlength="2000"
+            autocomplete="off"
+            spellcheck="true"
+          ></textarea>
+          <button class="chat-send" id="btnChatSend" disabled aria-label="Send message">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
 
       <footer class="footer">
         <div class="footer-status">
