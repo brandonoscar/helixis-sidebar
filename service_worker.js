@@ -24,10 +24,13 @@ const DEFAULT_HTTP_BASE = 'http://localhost:8765';
 
 const CHANNEL_EVENT_TYPES = new Set(['task.created', 'message.received']);
 
+// ─── Side panel — set at top level so it runs every time the SW starts ────────
+// This ensures the icon click opens the side panel even after SW restarts.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener(() => {
-  sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   console.log('[Helixis] Extension installed / updated — v0.2.0');
   _scheduleReconnectAlarm();
 });

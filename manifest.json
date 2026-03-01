@@ -33,7 +33,8 @@
   },
 
   "action": {
-    "default_title": "Helixis Copilot"
+    "default_title": "Helixis Copilot",
+    "default_popup": "popup.html"
   },
 
   "content_security_policy": {

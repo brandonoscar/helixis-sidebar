@@ -1,18 +1,12 @@
-document.getElementById("open").addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
-  if (typeof chrome.sidePanel !== "undefined") {
-    try {
-      await chrome.sidePanel.open({ tabId: tab.id });
-      console.log("Side panel opened successfully");
-    } catch (error) {
-      console.log("Failed to open side panel, falling back to new tab:", error);
-      chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") });
+// tabs.query gives us the browser window's ID (not the popup's own window).
+// This runs immediately on popup load — the popup is an invisible 1px shim.
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  const tab = tabs[0];
+  if (!tab) { window.close(); return; }
+  chrome.sidePanel.open({ windowId: tab.windowId }, () => {
+    if (chrome.runtime.lastError) {
+      console.error('[Helixis] sidePanel.open failed:', chrome.runtime.lastError.message);
     }
-  } else {
-    console.log("Side panel API not available, opening in new tab");
-    chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") });
-  }
-  
-  window.close();
+    window.close();
+  });
 });

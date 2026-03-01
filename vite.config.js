@@ -16,7 +16,7 @@ export default defineConfig({
 
       async closeBundle() {
         // Copy static extension files
-        ['manifest.json', 'content.js'].forEach(f => {
+        ['manifest.json', 'content.js', 'popup.html', 'popup.js'].forEach(f => {
           if (existsSync(f)) copyFileSync(f, `dist/${f}`);
         });
 
