@@ -1,22 +1,366 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Helixis Copilot</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 12px; }
-    textarea { width: 100%; height: 90px; }
-    button { width: 100%; padding: 10px; margin-top: 8px; }
-    pre { white-space: pre-wrap; background: #f3f3f3; padding: 8px; border-radius: 6px; }
-  </style>
+  <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
-  <h3>Helixis Copilot</h3>
-  <div><b>Current Tab:</b> <span id="tabUrl">...</span></div>
-  <textarea id="question" placeholder="What do you want to do on this page?"></textarea>
-  <button id="btn">Get Page Context</button>
-  <pre id="out">...</pre>
-  <script src="panel.js"></script>
+
+  <!-- ── HEADER ─────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 1.5L10.5 6L6 10.5L1.5 6Z" fill="white" fill-opacity="0.95"/>
+        </svg>
+      </div>
+      <span class="header-title">Helixis Copilot</span>
+    </div>
+    <!-- Status pill + gear icon — JS swaps class/text for Demo mode -->
+    <div class="header-right">
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+      <button class="header-gear" id="btnHeaderSettings" title="Settings" aria-label="Open Settings">
+        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.1 3.1l.7.7M12.2 12.2l.7.7M12.2 3.8l-.7.7M3.8 12.2l-.7.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── TAB BAR ────────────────────────────────────── -->
+  <nav class="tabs" role="tablist" aria-label="Main navigation">
+    <button class="tab active" data-tab="copilot"   role="tab" aria-selected="true">Copilot</button>
+    <button class="tab"        data-tab="reminders" role="tab" aria-selected="false">
+      Tasks
+      <span class="tab-badge" id="remindersBadge" hidden>0</span>
+    </button>
+    <button class="tab"        data-tab="tasks"     role="tab" aria-selected="false">Activity</button>
+    <button class="tab"        data-tab="settings"  role="tab" aria-selected="false">Settings</button>
+  </nav>
+
+  <!-- ── CONTENT ────────────────────────────────────── -->
+  <div class="content">
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  COPILOT TAB                                   -->
+    <!-- ══════════════════════════════════════════════ -->
+    <section id="tab-copilot" class="tab-panel active">
+
+      <!-- Context strip -->
+      <div class="context-strip">
+        <div class="context-label">Active Context</div>
+        <div class="context-value">
+          <div class="context-favicon">
+            <svg viewBox="0 0 8 8" fill="none">
+              <circle cx="4" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+          </div>
+          <span class="context-url is-empty" id="contextDisplay">No active context</span>
+        </div>
+      </div>
+
+      <!-- Restricted-URL notice (hidden by default) -->
+      <div class="notice-strip" id="copilotNotice" hidden>
+        <svg viewBox="0 0 14 14" fill="none">
+          <path d="M7 1.5L12.5 11H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M7 5.5v3M7 10h.01" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="copilotNoticeText">Can't capture from browser internal pages. Open a normal website tab.</span>
+      </div>
+
+      <!-- Cards + Chat messages -->
+      <main class="main" id="copilotMain">
+
+        <!-- Primary: Read Page Context -->
+        <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
+          <div class="card-body">
+            <div class="card-header-row">
+              <div class="card-icon card-icon-primary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="card-text">
+                <div class="card-title">Read Page Context</div>
+                <div class="card-desc">Extract visible text content from the active tab.</div>
+              </div>
+              <div class="card-badge">Primary</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading card (shared) -->
+        <div class="card loading-card" id="loadingCard">
+          <div class="spinner"></div>
+          Working…
+        </div>
+
+        <!-- Output card (page context result) -->
+        <div class="card output-card" id="outputCard">
+          <div class="output-header">
+            <span class="output-label">Page Context</span>
+            <button class="output-close" id="outputClose" title="Clear">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="output-body" id="outputBody"></div>
+        </div>
+
+        <!-- Selection card (saved selection result) -->
+        <div class="card selection-card" id="selectionCard">
+          <div class="selection-header">
+            <span class="selection-label">Saved Selection</span>
+            <button class="output-close" id="selectionClose" title="Clear selection">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="selection-body">
+            <div class="selection-quote" id="selectionText"></div>
+            <div class="selection-source" id="selectionSource"></div>
+            <div class="selection-actions">
+              <button class="btn btn-ghost btn-sm" id="btnAddSelectionAsReminder">+ Add as Reminder</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Secondary grid -->
+        <div class="cards-grid">
+
+          <!-- Save Selection — ENABLED -->
+          <div class="card card-sm" id="cardSaveSelection" role="button" tabindex="0" aria-label="Save selected text">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M3 4.5h2.5v3H3zM3 9.5h2.5v3H3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+                  <path d="M7.5 6h5M7.5 11h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Save Selection</div>
+              <div class="card-desc">Capture selected text</div>
+            </div>
+          </div>
+
+          <!-- Summarize — disabled -->
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Summarize</div>
+              <div class="card-desc">AI summary</div>
+            </div>
+          </div>
+
+          <!-- Draft Reply — disabled -->
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Draft Reply</div>
+              <div class="card-desc">Compose response</div>
+            </div>
+          </div>
+
+          <!-- Actions — disabled -->
+          <div class="card card-sm card-disabled">
+            <div class="card-body">
+              <div class="card-icon card-icon-secondary">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="card-title">Actions</div>
+              <div class="card-desc">Run page actions</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">
+            <svg viewBox="0 0 18 18" fill="none">
+              <path d="M9 3v9M5.5 8.5L9 12l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M3 14.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="empty-title">Nothing here yet</div>
+          <div class="empty-desc">Click "Read Page Context" or select text on the page and click "Save Selection".</div>
+        </div>
+
+      </main>
+
+      <!-- Chat bar — sticky at bottom of Copilot tab -->
+      <div class="chat-bar" id="chatBar">
+        <div class="chat-input-wrap">
+          <textarea
+            id="chatInput"
+            class="chat-input"
+            placeholder="Message Copilot…"
+            rows="1"
+            maxlength="2000"
+            autocomplete="off"
+            spellcheck="true"
+          ></textarea>
+          <button class="chat-send" id="btnChatSend" disabled aria-label="Send message">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <footer class="footer">
+        <div class="footer-status">
+          <div class="footer-dot"></div>
+          Connected · Ready
+        </div>
+        <span class="footer-version">v0.2.0</span>
+      </footer>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  REMINDERS TAB                                 -->
+    <!-- ══════════════════════════════════════════════ -->
+    <section id="tab-reminders" class="tab-panel">
+
+      <!-- Compose -->
+      <div class="reminder-compose">
+        <input
+          type="text"
+          id="reminderInput"
+          placeholder="Add a reminder and press Enter…"
+          maxlength="200"
+          autocomplete="off"
+        />
+        <button class="btn btn-primary btn-sm" id="btnAddReminder" type="button">Add</button>
+      </div>
+
+      <!-- List (populated by JS) -->
+      <ul class="reminder-list" id="reminderList" role="list">
+        <!-- Empty state injected by JS on first load -->
+      </ul>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  TASKS TAB                                     -->
+    <!-- ══════════════════════════════════════════════ -->
+    <section id="tab-tasks" class="tab-panel">
+      <div class="list-header">
+        <span class="list-title">Activity</span>
+        <button class="btn btn-ghost btn-sm" id="btnRefreshTasks">Refresh</button>
+      </div>
+      <ul class="event-list" id="tasksList" role="list">
+        <li class="empty">No tasks yet.</li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  SETTINGS TAB                                  -->
+    <!-- ══════════════════════════════════════════════ -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="settings-body">
+
+        <!-- Helixis Cloud credentials -->
+        <div class="section-label">Helixis Cloud</div>
+
+        <div class="field">
+          <label for="apiKeyInput">API Key</label>
+          <div class="input-row">
+            <input type="password" id="apiKeyInput" placeholder="Enter API key…" autocomplete="off" spellcheck="false"/>
+            <button class="btn btn-ghost btn-sm" id="btnToggleKey" type="button">Show</button>
+          </div>
+          <div class="key-status not-configured" id="keyStatus">○ Not configured</div>
+          <p class="security-note">
+            🔒 Key is passed directly to the background worker and written to
+            <code>chrome.storage.local</code>. It is never accessible from page scripts or the panel after saving.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="channelUrl">Event Channel URL</label>
+          <input type="text" id="channelUrl" value="ws://localhost:8765/events" placeholder="ws://localhost:8765/events" spellcheck="false"/>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Connectors -->
+        <div class="section-label">Connectors</div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Helixis Cloud</div>
+            <div class="toggle-sublabel">Real-time tasks &amp; messages</div>
+          </div>
+          <label class="toggle" title="Enable Helixis Cloud connector">
+            <input type="checkbox" id="toggleHelixis"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Buildium</div>
+            <div class="toggle-sublabel">Coming soon</div>
+          </div>
+          <label class="toggle" title="Buildium connector (coming soon)">
+            <input type="checkbox" id="toggleBuildium" disabled/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Developer / Demo -->
+        <div class="section-label">Developer</div>
+
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Demo Mode</div>
+            <div class="toggle-sublabel">Preload sample data for demos</div>
+          </div>
+          <label class="toggle" title="Enable demo mode">
+            <input type="checkbox" id="toggleDemoMode"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Actions -->
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnSaveSettings"   type="button">Save Settings</button>
+          <button class="btn btn-ghost"   id="btnTestConnection" type="button">Test Connection</button>
+        </div>
+
+        <div class="settings-status" id="settingsStatus" role="status" aria-live="polite"></div>
+
+      </div>
+    </section>
+
+  </div><!-- .content -->
+
+  <!-- Global toast (outside tab panels, fixed position) -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="panel.js"></script>
 </body>
 </html>
