@@ -12,7 +12,9 @@ import { MSG, sendToWorker } from './core/messaging.js';
 import { tabs, scripting }   from './platform/extension.js';
 
 // ─── Gemini Config ────────────────────────────────────────────────────────────
-const GEMINI_API_KEY = 'AIzaSyC9Vo6i2baOv9L2aqdmrqSV1o53bbbtRxg';
+// Key is loaded from .env.local → VITE_GEMINI_API_KEY (see .env.example).
+// panel.js is legacy and not processed by Vite; the active build uses src/HelixisPanel.jsx.
+const GEMINI_API_KEY = '';
 const GEMINI_URL     = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 /** Multi-turn conversation history in Gemini format. */

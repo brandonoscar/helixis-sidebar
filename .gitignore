@@ -1,3 +1,7 @@
 node_modules/
 dist/
 .claude/
+
+# Local env files — never commit these (contain API keys)
+.env.local
+.env.*.local
