@@ -1,0 +1,156 @@
+/* ── Login / Auth Screens ─────────────────────────────── */
+
+.login-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #7c6ff0, #a78bfa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(124, 111, 240, 0.28);
+  margin-bottom: 4px;
+}
+
+.login-logo svg {
+  width: 18px;
+  height: 18px;
+}
+
+.login-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.login-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin: 0 0 6px;
+}
+
+.login-error {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--danger-soft);
+  border: 1px solid rgba(255, 69, 58, 0.22);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.login-card input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--ease);
+}
+
+.login-card input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.login-card input:focus {
+  border-color: var(--accent-border);
+}
+
+.login-btn {
+  width: 100%;
+  padding: 9px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity var(--ease);
+  margin-top: 2px;
+}
+
+.login-btn:hover {
+  opacity: 0.84;
+}
+
+.login-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Business picker */
+.business-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.business-option {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--ease);
+}
+
+.business-option:hover {
+  border-color: var(--accent-border);
+}
+
+.business-option .business-option-role {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* Header right side */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.business-name {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
