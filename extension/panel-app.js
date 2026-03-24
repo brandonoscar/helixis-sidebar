@@ -270,9 +270,11 @@ async function handleSend() {
   list.scrollTop = list.scrollHeight;
 
   try {
+    // Build page context string from structured browser context
+    const pageCtx = state.context ? formatContextForAI(state.context) : undefined;
     const result = await sendChatMessage(
       state.aiConversation.slice(-20), // Last 20 messages
-      state.context?.text              // Include page context if captured
+      pageCtx                          // Include structured page context
     );
 
     // Remove typing indicator
@@ -387,46 +389,26 @@ function saveReminder() {
   renderReminders();
 }
 
-// ── PAGE CONTEXT CAPTURE ──────────────────────────────
+// ── PAGE CONTEXT CAPTURE (Structured Browser Context) ──
 
+/**
+ * Request a full structured browser context capture via the service worker.
+ * Returns a BrowserContext payload (see extension/lib/context/types.js).
+ */
 async function captureContext() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) throw new Error("No active tab");
-
-  let payload;
-
-  try {
-    payload = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("timeout")), 1500);
-      chrome.tabs.sendMessage(tab.id, { type: "HELIXIS_GET_CONTEXT" }, (res) => {
-        clearTimeout(timer);
-        if (chrome.runtime.lastError || !res)
-          reject(chrome.runtime.lastError ?? new Error("no response"));
-        else resolve(res);
-      });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Context capture timed out")), 5000);
+    chrome.runtime.sendMessage({ type: "HELIXIS_REQUEST_FULL_CONTEXT" }, (response) => {
+      clearTimeout(timer);
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else if (response?.error) {
+        reject(new Error(response.error));
+      } else {
+        resolve(response);
+      }
     });
-  } catch {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => ({
-        text: (document.body?.innerText ?? "").slice(0, 5000),
-        title: document.title,
-        url: location.href,
-      }),
-    });
-    payload = result?.result;
-  }
-
-  let hostname = "(unknown)";
-  try { hostname = new URL(tab.url).hostname; } catch { hostname = tab.url ?? ""; }
-
-  return {
-    hostname,
-    title: payload?.title || tab.title || "",
-    text: payload?.text || "",
-    url: payload?.url || tab.url || "",
-    ts: Date.now(),
-  };
+  });
 }
 
 async function handleReadContext() {
@@ -439,7 +421,26 @@ async function handleReadContext() {
     state.context = ctx;
     saveKeys("context");
     switchTab("chat");
-    pushMessage("assistant", `Captured context from ${ctx.hostname}.`);
+
+    // Build a useful capture summary for the chat
+    const parts = [`Captured context from ${ctx.raw.hostname}`];
+    if (ctx.classification.pageType !== "unknown") {
+      parts.push(`Page type: ${ctx.classification.pageType} (${Math.round(ctx.classification.confidence * 100)}%)`);
+    }
+    if (ctx.classification.software) {
+      parts.push(`Software: ${ctx.classification.software}`);
+    }
+    const entityCount =
+      ctx.entities.properties.length +
+      ctx.entities.units.length +
+      ctx.entities.tenants.length;
+    if (entityCount > 0) {
+      parts.push(`Found ${entityCount} entity clue(s)`);
+    }
+    if (ctx.selectedText) {
+      parts.push(`Selected text: "${ctx.selectedText.slice(0, 80)}${ctx.selectedText.length > 80 ? "..." : ""}"`);
+    }
+    pushMessage("assistant", parts.join("\n"));
   } catch (err) {
     switchTab("chat");
     pushMessage("assistant", `Could not capture page: ${err.message || err}`);
@@ -451,10 +452,96 @@ async function handleReadContext() {
 
 function renderContext() {
   const ctx = state.context;
-  document.getElementById("ctxHostname").textContent = ctx?.hostname || "—";
-  document.getElementById("ctxTitle").textContent = ctx?.title || "—";
-  document.getElementById("ctxTimestamp").textContent = ctx?.ts ? fmtTs(ctx.ts) : "—";
-  document.getElementById("ctxText").value = ctx?.text || "";
+
+  // -- Page Info section --
+  document.getElementById("ctxHostname").textContent = ctx?.raw?.hostname || "—";
+  document.getElementById("ctxTitle").textContent = ctx?.raw?.pageTitle || "—";
+  document.getElementById("ctxTimestamp").textContent = ctx?.timestamp ? fmtTs(ctx.timestamp) : "—";
+
+  // -- Classification section --
+  const typeEl = document.getElementById("ctxPageType");
+  const softwareEl = document.getElementById("ctxSoftware");
+  const confidenceEl = document.getElementById("ctxConfidence");
+  const signalsEl = document.getElementById("ctxSignals");
+
+  if (typeEl) typeEl.textContent = ctx?.classification?.pageType || "—";
+  if (softwareEl) softwareEl.textContent = ctx?.classification?.software || "none";
+  if (confidenceEl) confidenceEl.textContent = ctx?.classification?.confidence
+    ? `${Math.round(ctx.classification.confidence * 100)}%`
+    : "—";
+  if (signalsEl) signalsEl.textContent = ctx?.classification?.signals?.join(", ") || "—";
+
+  // -- Entities section --
+  renderEntityList("ctxProperties", ctx?.entities?.properties);
+  renderEntityList("ctxUnits", ctx?.entities?.units);
+  renderEntityList("ctxTenants", ctx?.entities?.tenants);
+
+  // -- Identifiers section --
+  renderIdentifiers(ctx?.identifiers);
+
+  // -- Selected text --
+  const selEl = document.getElementById("ctxSelectedText");
+  if (selEl) selEl.textContent = ctx?.selectedText || "(none)";
+
+  // -- Visible text summary --
+  const summaryEl = document.getElementById("ctxSummary");
+  if (summaryEl) summaryEl.value = ctx?.visibleTextSummary || "";
+
+  // -- Capture timing --
+  const timingEl = document.getElementById("ctxTiming");
+  if (timingEl) timingEl.textContent = ctx?.captureMs ? `${ctx.captureMs}ms` : "—";
+}
+
+function renderEntityList(containerId, entities) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (!entities || entities.length === 0) {
+    el.innerHTML = '<span class="ctx-empty">none detected</span>';
+    return;
+  }
+
+  el.innerHTML = entities.map((e) =>
+    `<div class="ctx-entity">` +
+    `<span class="ctx-entity-value">${esc(e.value)}</span>` +
+    `<span class="ctx-entity-meta">${esc(e.field)} via ${esc(e.source)} (${Math.round(e.confidence * 100)}%)</span>` +
+    `</div>`
+  ).join("");
+}
+
+function renderIdentifiers(identifiers) {
+  const el = document.getElementById("ctxIdentifiers");
+  if (!el) return;
+
+  if (!identifiers) {
+    el.innerHTML = '<span class="ctx-empty">none found</span>';
+    return;
+  }
+
+  const groups = [
+    { label: "Emails", items: identifiers.emails },
+    { label: "Phones", items: identifiers.phones },
+    { label: "Addresses", items: identifiers.addresses },
+    { label: "Amounts", items: identifiers.amounts },
+    { label: "Dates", items: identifiers.dates },
+    { label: "Reference IDs", items: identifiers.referenceIds },
+    { label: "Names", items: identifiers.names },
+    { label: "Unit Numbers", items: identifiers.unitNumbers },
+  ].filter((g) => g.items && g.items.length > 0);
+
+  if (groups.length === 0) {
+    el.innerHTML = '<span class="ctx-empty">none found</span>';
+    return;
+  }
+
+  el.innerHTML = groups.map((g) =>
+    `<div class="ctx-id-group">` +
+    `<span class="ctx-id-label">${esc(g.label)}</span>` +
+    g.items.map((i) =>
+      `<span class="ctx-id-value">${esc(i.normalized)}</span>`
+    ).join("") +
+    `</div>`
+  ).join("");
 }
 
 async function handleRefreshContext() {
@@ -467,7 +554,7 @@ async function handleRefreshContext() {
     state.context = ctx;
     saveKeys("context");
     renderContext();
-    pushMessage("assistant", `Context refreshed from ${ctx.hostname}.`);
+    pushMessage("assistant", `Context refreshed from ${ctx.raw.hostname}. Type: ${ctx.classification.pageType}`);
   } catch (err) {
     pushMessage("assistant", `Refresh failed: ${err.message || err}`);
   } finally {
@@ -480,6 +567,59 @@ async function handleRefreshContext() {
       </svg>
       Refresh Context`;
   }
+}
+
+// ── AI CONTEXT FORMATTING ─────────────────────────────
+
+/**
+ * Format the structured browser context into a text representation
+ * suitable for sending to the AI as page context.
+ */
+function formatContextForAI(ctx) {
+  if (!ctx) return "";
+  const parts = [];
+
+  parts.push(`Current page: ${ctx.raw?.url || "unknown"}`);
+  parts.push(`Page title: ${ctx.raw?.pageTitle || "unknown"}`);
+
+  if (ctx.classification?.pageType !== "unknown") {
+    parts.push(`Page type: ${ctx.classification.pageType}`);
+  }
+  if (ctx.classification?.software) {
+    parts.push(`Software: ${ctx.classification.software}`);
+  }
+
+  // Entity clues
+  if (ctx.entities?.properties?.length) {
+    parts.push("Property clues: " + ctx.entities.properties.map(e => `${e.field}="${e.value}"`).join(", "));
+  }
+  if (ctx.entities?.units?.length) {
+    parts.push("Unit clues: " + ctx.entities.units.map(e => `${e.field}="${e.value}"`).join(", "));
+  }
+  if (ctx.entities?.tenants?.length) {
+    parts.push("Tenant clues: " + ctx.entities.tenants.map(e => `${e.field}="${e.value}"`).join(", "));
+  }
+
+  // Key identifiers
+  const ids = ctx.identifiers;
+  if (ids) {
+    if (ids.emails?.length) parts.push("Emails on page: " + ids.emails.map(i => i.normalized).join(", "));
+    if (ids.phones?.length) parts.push("Phones on page: " + ids.phones.map(i => i.normalized).join(", "));
+    if (ids.amounts?.length) parts.push("Dollar amounts: " + ids.amounts.map(i => i.normalized).join(", "));
+    if (ids.referenceIds?.length) parts.push("Reference IDs: " + ids.referenceIds.map(i => i.normalized).join(", "));
+  }
+
+  // Selected text
+  if (ctx.selectedText) {
+    parts.push(`User-selected text: "${ctx.selectedText}"`);
+  }
+
+  // Visible text summary (truncated for AI)
+  if (ctx.visibleTextSummary) {
+    parts.push("Page content summary:\n" + ctx.visibleTextSummary.slice(0, 2000));
+  }
+
+  return parts.join("\n");
 }
 
 // ── UTILS ─────────────────────────────────────────────

@@ -6,6 +6,7 @@
   <title>Helixis Copilot</title>
   <link rel="stylesheet" href="../panel.css" />
   <link rel="stylesheet" href="auth.css" />
+  <link rel="stylesheet" href="context.css" />
 </head>
 <body>
 
@@ -208,10 +209,11 @@
         </div>
       </div>
 
-      <!-- CONTEXT ───────────────────────────────────── -->
+      <!-- CONTEXT (Structured Browser Context) ────── -->
       <div class="view" id="view-context">
         <div class="view-inner">
 
+          <!-- Page Info -->
           <div class="context-info-card">
             <div class="context-row">
               <span class="context-row-label">Site</span>
@@ -227,9 +229,69 @@
             </div>
           </div>
 
+          <!-- Classification -->
+          <div class="ctx-section-label">Classification</div>
+          <div class="context-info-card">
+            <div class="context-row">
+              <span class="context-row-label">Page Type</span>
+              <span class="context-row-value ctx-highlight" id="ctxPageType">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-row-label">Software</span>
+              <span class="context-row-value" id="ctxSoftware">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-row-label">Confidence</span>
+              <span class="context-row-value" id="ctxConfidence">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-row-label">Signals</span>
+              <span class="context-row-value" id="ctxSignals">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-row-label">Capture</span>
+              <span class="context-row-value" id="ctxTiming">—</span>
+            </div>
+          </div>
+
+          <!-- Entities -->
+          <div class="ctx-section-label">Entity Clues</div>
+          <div class="context-info-card">
+            <div class="context-row">
+              <span class="context-row-label">Properties</span>
+              <span class="context-row-value" id="ctxProperties"><span class="ctx-empty">none detected</span></span>
+            </div>
+            <div class="context-row">
+              <span class="context-row-label">Units</span>
+              <span class="context-row-value" id="ctxUnits"><span class="ctx-empty">none detected</span></span>
+            </div>
+            <div class="context-row">
+              <span class="context-row-label">Tenants</span>
+              <span class="context-row-value" id="ctxTenants"><span class="ctx-empty">none detected</span></span>
+            </div>
+          </div>
+
+          <!-- Identifiers -->
+          <div class="ctx-section-label">Identifiers</div>
+          <div class="context-info-card">
+            <div class="context-row" style="display:block; padding:8px 12px;">
+              <div id="ctxIdentifiers"><span class="ctx-empty">none found</span></div>
+            </div>
+          </div>
+
+          <!-- Selected Text -->
+          <div class="ctx-section-label">Selected Text</div>
+          <div class="context-info-card">
+            <div class="context-row">
+              <span class="context-row-value" id="ctxSelectedText" style="font-style:italic; color:var(--text-tertiary);">(none)</span>
+            </div>
+          </div>
+
+          <!-- Visible Text Summary -->
+          <div class="ctx-section-label">Page Summary</div>
           <textarea
             class="ctx-textarea"
-            id="ctxText"
+            id="ctxSummary"
             placeholder="No context captured yet. Use Read Page Context in the Actions tab."
             readonly
           ></textarea>
