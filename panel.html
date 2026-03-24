@@ -27,10 +27,9 @@
   <!-- ── TAB BAR ──────────────────────────────────── -->
   <nav class="tab-bar">
     <button class="tab" data-tab="chat">Chat</button>
-    <button class="tab" data-tab="reminders">
-      Reminders<span class="badge" id="reminderBadge"></span>
+    <button class="tab" data-tab="tasks">
+      Tasks<span class="badge" id="taskBadge"></span>
     </button>
-    <button class="tab" data-tab="actions">Actions</button>
     <button class="tab" data-tab="context">Context</button>
   </nav>
 
@@ -47,9 +46,33 @@
             </svg>
           </div>
           <div class="chat-empty-title">How can I help?</div>
-          <div class="chat-empty-desc">Ask anything, or capture the page from the Actions tab.</div>
+          <div class="chat-empty-desc">Ask anything about the page you're viewing.</div>
         </div>
       </div>
+
+      <!-- Quick Actions (above input) -->
+      <div class="quick-actions" id="quickActions">
+        <button class="quick-action-chip" id="qaReadContext" title="Capture page context">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Read Page
+        </button>
+        <button class="quick-action-chip disabled" title="Coming soon">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Summarize
+        </button>
+        <button class="quick-action-chip disabled" title="Coming soon">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Draft Reply
+        </button>
+      </div>
+
       <div class="input-bar">
         <input
           type="text"
@@ -66,87 +89,17 @@
       </div>
     </div>
 
-    <!-- REMINDERS ─────────────────────────────────── -->
-    <div class="view" id="view-reminders">
+    <!-- TASKS (webhook-driven only) ────────────────── -->
+    <div class="view" id="view-tasks">
       <div class="view-header">
-        <span class="view-title">Reminders</span>
-        <button class="icon-btn" id="addReminderBtn" title="Add reminder">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </button>
+        <span class="view-title">Tasks</span>
+        <div class="task-filter-row">
+          <button class="filter-chip active" data-filter="open">Open</button>
+          <button class="filter-chip" data-filter="all">All</button>
+        </div>
       </div>
-      <div class="view-inner">
-        <div class="reminder-form" id="reminderForm" hidden>
-          <input type="text"           id="reminderTitle" placeholder="Reminder title" />
-          <input type="text"           id="reminderNote"  placeholder="Note (optional)" />
-          <input type="datetime-local" id="reminderDue" />
-          <div class="form-row">
-            <button class="form-btn form-btn-primary"   id="reminderSave">Save</button>
-            <button class="form-btn form-btn-secondary" id="reminderCancel">Cancel</button>
-          </div>
-        </div>
-        <div id="remindersList"></div>
-      </div>
-    </div>
-
-    <!-- ACTIONS ───────────────────────────────────── -->
-    <div class="view" id="view-actions">
-      <div class="view-inner">
-
-        <div class="action-card primary-action" id="actionReadCtx" role="button" tabindex="0">
-          <div class="action-icon accent">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="action-text">
-            <div class="action-title">Read Page Context</div>
-            <div class="action-desc">Extract visible text from the active tab</div>
-          </div>
-          <div class="action-tag active-tag">Active</div>
-        </div>
-
-        <div class="action-card disabled">
-          <div class="action-icon muted">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="action-text">
-            <div class="action-title">Summarize</div>
-            <div class="action-desc">AI summary of the page</div>
-          </div>
-          <div class="action-tag soon-tag">Soon</div>
-        </div>
-
-        <div class="action-card disabled">
-          <div class="action-icon muted">
-            <svg viewBox="0 0 16 16" fill="none">
-              <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="action-text">
-            <div class="action-title">Draft Reply</div>
-            <div class="action-desc">Compose a response for this page</div>
-          </div>
-          <div class="action-tag soon-tag">Soon</div>
-        </div>
-
-        <div class="action-card disabled">
-          <div class="action-icon muted">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="action-text">
-            <div class="action-title">Run Actions</div>
-            <div class="action-desc">Execute page-level automations</div>
-          </div>
-          <div class="action-tag soon-tag">Soon</div>
-        </div>
-
+      <div class="view-inner" id="tasksList">
+        <!-- Populated by JS -->
       </div>
     </div>
 
@@ -172,7 +125,7 @@
         <textarea
           class="ctx-textarea"
           id="ctxText"
-          placeholder="No context captured yet. Use Read Page Context in the Actions tab."
+          placeholder="No context captured yet. Use Read Page in the Chat tab."
           readonly
         ></textarea>
 

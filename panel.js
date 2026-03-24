@@ -1,26 +1,27 @@
 /*
  * Helixis Copilot — panel.js
- * Tab switching, chat, reminders, actions, context — all local, no backend.
+ * Tab switching, chat with quick actions, webhook tasks, context — all local, no backend.
  */
 
 // ── STATE ─────────────────────────────────────────────
 
 const state = {
-  activeTab: 'chat',
-  messages:  [],        // [{ role, text, ts }]
-  reminders: [],        // [{ id, title, note, due, done }]
-  context:   null       // { hostname, title, text, url, ts }
+  activeTab:  'chat',
+  messages:   [],        // [{ role, text, ts }]
+  tasks:      [],        // [{ id, title, description, priority, status, source, entity, createdAt }]
+  taskFilter: 'open',
+  context:    null       // { hostname, title, text, url, ts }
 };
 
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
   const data = await chrome.storage.local.get(
-    ['activeTab', 'messages', 'reminders', 'context']
+    ['activeTab', 'messages', 'tasks', 'context']
   );
   if (data.activeTab) state.activeTab = data.activeTab;
   if (data.messages)  state.messages  = data.messages;
-  if (data.reminders) state.reminders = data.reminders;
+  if (data.tasks)     state.tasks     = data.tasks;
   if (data.context)   state.context   = data.context;
 }
 
@@ -44,6 +45,7 @@ function switchTab(name) {
   );
 
   if (name === 'context') renderContext();
+  if (name === 'tasks')   renderTasks();
 }
 
 // ── CHAT ──────────────────────────────────────────────
@@ -101,52 +103,98 @@ function handleSend() {
   setTimeout(() => {
     pushMessage(
       'assistant',
-      "AI responses are coming soon! For now, try the Actions tab to capture page context."
+      "AI responses are coming soon! For now, try the quick actions above to capture page context."
     );
   }, 500);
 }
 
-// ── REMINDERS ─────────────────────────────────────────
+// ── QUICK ACTIONS (in Chat) ───────────────────────────
 
-function renderReminders() {
-  const list = document.getElementById('remindersList');
-  list.innerHTML = '';
+async function handleReadContext() {
+  const btn = document.getElementById('qaReadContext');
+  btn.classList.add('loading');
+  btn.disabled = true;
 
-  if (state.reminders.length === 0) {
-    list.innerHTML = '<div class="reminders-empty">No reminders yet — press + to add one.</div>';
-  } else {
-    const frag = document.createDocumentFragment();
-    state.reminders.forEach(r => frag.appendChild(buildReminderEl(r)));
-    list.appendChild(frag);
+  try {
+    const ctx = await captureContext();
+    state.context = ctx;
+    saveKeys('context');
+    pushMessage('assistant', `Captured context from ${ctx.hostname}.\n\nPage: ${ctx.title}\nText length: ${ctx.text.length} chars`);
+  } catch (err) {
+    pushMessage('assistant', `Could not capture page: ${err.message || err}`);
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
   }
-
-  updateBadge();
 }
 
-function buildReminderEl(r) {
-  const now     = Date.now();
-  const dueSoon = r.due && !r.done && (new Date(r.due).getTime() - now) < 86_400_000;
-  const card    = document.createElement('div');
-  card.className  = 'reminder-card' + (r.done ? ' done' : '');
-  card.dataset.id = r.id;
+// ── TASKS (webhook-driven) ────────────────────────────
 
-  const titleHtml =
-    esc(r.title) + (dueSoon ? '<span class="due-soon-badge">Soon</span>' : '');
+function renderTasks() {
+  const list = document.getElementById('tasksList');
+  list.innerHTML = '';
+
+  let filtered = state.tasks;
+  if (state.taskFilter === 'open') {
+    filtered = state.tasks.filter(t => t.status === 'open' || t.status === 'in_progress');
+  }
+
+  if (filtered.length === 0) {
+    list.innerHTML = `
+      <div class="tasks-empty">
+        <div class="tasks-empty-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M8 14l4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="14" cy="14" r="11" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+          </svg>
+        </div>
+        <div class="tasks-empty-title">No tasks yet</div>
+        <div class="tasks-empty-desc">Tasks appear here automatically from your connected integrations like Buildium.</div>
+      </div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  filtered.forEach(t => frag.appendChild(buildTaskEl(t)));
+  list.appendChild(frag);
+
+  updateTaskBadge();
+}
+
+function buildTaskEl(task) {
+  const card = document.createElement('div');
+  card.className = `task-card task-${task.priority || 'medium'} ${task.status === 'done' ? 'done' : ''}`;
+  card.dataset.id = task.id;
+
+  const priorityLabel = {
+    urgent: 'Urgent',
+    high:   'High',
+    medium: 'Med',
+    low:    'Low'
+  }[task.priority] || 'Med';
+
+  const sourceLabel = task.source === 'webhook' ? 'Buildium' : (task.source || 'Integration');
 
   card.innerHTML = `
-    <div class="reminder-content">
-      <div class="reminder-title">${titleHtml}</div>
-      ${r.note ? `<div class="reminder-note">${esc(r.note)}</div>` : ''}
-      ${r.due  ? `<div class="reminder-due">${fmtDue(r.due)}</div>` : ''}
+    <div class="task-priority-bar"></div>
+    <div class="task-body">
+      <div class="task-header-row">
+        <span class="task-priority-tag">${esc(priorityLabel)}</span>
+        <span class="task-source-tag">${esc(sourceLabel)}</span>
+      </div>
+      <div class="task-title">${esc(task.title)}</div>
+      ${task.description ? `<div class="task-desc">${esc(task.description)}</div>` : ''}
+      ${task.entity ? `<div class="task-entity">${esc(task.entity)}</div>` : ''}
+      <div class="task-meta">${fmtTs(task.createdAt || task.created_at)}</div>
     </div>
-    <div class="reminder-btns">
-      <button class="reminder-btn check" title="${r.done ? 'Mark undone' : 'Mark done'}">
+    <div class="task-actions">
+      <button class="task-action-btn check" title="Mark done">
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
           <path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" stroke-width="1.5"
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-      <button class="reminder-btn del" title="Delete">
+      <button class="task-action-btn dismiss" title="Dismiss">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
           <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5"
                 stroke-linecap="round"/>
@@ -154,53 +202,23 @@ function buildReminderEl(r) {
       </button>
     </div>`;
 
-  card.querySelector('.check').addEventListener('click', () => toggleReminder(r.id));
-  card.querySelector('.del').addEventListener('click',   () => deleteReminder(r.id));
+  card.querySelector('.check').addEventListener('click', () => updateTask(task.id, 'done'));
+  card.querySelector('.dismiss').addEventListener('click', () => updateTask(task.id, 'dismissed'));
   return card;
 }
 
-function toggleReminder(id) {
-  const r = state.reminders.find(x => x.id === id);
-  if (r) { r.done = !r.done; saveKeys('reminders'); renderReminders(); }
-}
-
-function deleteReminder(id) {
-  state.reminders = state.reminders.filter(x => x.id !== id);
-  saveKeys('reminders');
-  renderReminders();
-}
-
-function updateBadge() {
-  const count = state.reminders.filter(r => !r.done).length;
-  document.getElementById('reminderBadge').textContent = count > 0 ? count : '';
-}
-
-function showForm(visible) {
-  const form = document.getElementById('reminderForm');
-  form.hidden = !visible;
-  if (visible) {
-    document.getElementById('reminderTitle').value = '';
-    document.getElementById('reminderNote').value  = '';
-    document.getElementById('reminderDue').value   = '';
-    document.getElementById('reminderTitle').focus();
+function updateTask(id, newStatus) {
+  const t = state.tasks.find(x => x.id === id);
+  if (t) {
+    t.status = newStatus;
+    saveKeys('tasks');
+    renderTasks();
   }
 }
 
-function saveReminder() {
-  const title = document.getElementById('reminderTitle').value.trim();
-  if (!title) { document.getElementById('reminderTitle').focus(); return; }
-
-  state.reminders.unshift({
-    id:    Date.now().toString(),
-    title,
-    note:  document.getElementById('reminderNote').value.trim(),
-    due:   document.getElementById('reminderDue').value,
-    done:  false
-  });
-
-  saveKeys('reminders');
-  showForm(false);
-  renderReminders();
+function updateTaskBadge() {
+  const count = state.tasks.filter(t => t.status === 'open' || t.status === 'in_progress').length;
+  document.getElementById('taskBadge').textContent = count > 0 ? count : '';
 }
 
 // ── PAGE CONTEXT CAPTURE ──────────────────────────────
@@ -246,28 +264,6 @@ async function captureContext() {
   };
 }
 
-// ── ACTIONS TAB ───────────────────────────────────────
-
-async function handleReadContext() {
-  const card = document.getElementById('actionReadCtx');
-  card.style.pointerEvents = 'none';
-  card.style.opacity = '0.55';
-
-  try {
-    const ctx = await captureContext();
-    state.context = ctx;
-    saveKeys('context');
-    switchTab('chat');
-    pushMessage('assistant', `✓ Captured context from ${ctx.hostname}.`);
-  } catch (err) {
-    switchTab('chat');
-    pushMessage('assistant', `⚠ Could not capture page: ${err.message || err}`);
-  } finally {
-    card.style.pointerEvents = '';
-    card.style.opacity = '';
-  }
-}
-
 // ── CONTEXT TAB ───────────────────────────────────────
 
 function renderContext() {
@@ -288,9 +284,9 @@ async function handleRefreshContext() {
     state.context = ctx;
     saveKeys('context');
     renderContext();
-    pushMessage('assistant', `✓ Context refreshed from ${ctx.hostname}.`);
+    pushMessage('assistant', `Context refreshed from ${ctx.hostname}.`);
   } catch (err) {
-    pushMessage('assistant', `⚠ Refresh failed: ${err.message || err}`);
+    pushMessage('assistant', `Refresh failed: ${err.message || err}`);
   } finally {
     btn.disabled   = false;
     btn.innerHTML  = `
@@ -313,20 +309,13 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
-function fmtDue(due) {
-  try {
-    return new Date(due).toLocaleString([], {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-  } catch { return due; }
-}
-
 function fmtTs(ts) {
+  if (!ts) return '';
   try {
     return new Date(ts).toLocaleString([], {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
-  } catch { return ts; }
+  } catch { return String(ts); }
 }
 
 // ── INIT ──────────────────────────────────────────────
@@ -346,18 +335,22 @@ async function init() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   });
 
-  // Reminders
-  renderReminders();
-  document.getElementById('addReminderBtn').addEventListener('click', () => showForm(true));
-  document.getElementById('reminderSave').addEventListener('click', saveReminder);
-  document.getElementById('reminderCancel').addEventListener('click', () => showForm(false));
+  // Quick actions in chat
+  document.getElementById('qaReadContext').addEventListener('click', handleReadContext);
 
-  // Actions
-  const readCtxCard = document.getElementById('actionReadCtx');
-  readCtxCard.addEventListener('click', handleReadContext);
-  readCtxCard.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleReadContext(); }
+  // Task filter chips
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.taskFilter = chip.dataset.filter;
+      renderTasks();
+    });
   });
+
+  // Tasks
+  renderTasks();
+  updateTaskBadge();
 
   // Context
   document.getElementById('refreshCtxBtn').addEventListener('click', handleRefreshContext);
