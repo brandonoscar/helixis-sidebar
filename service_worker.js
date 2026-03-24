@@ -64,6 +64,30 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabContextCache.delete(tabId);
 });
 
+// SPA route-change: content script notifies us when an in-page navigation
+// happened (pushState, popstate, hashchange). Re-fetch a light context
+// snapshot so the panel always shows the current page.
+// The content script's SPA observer sends this after DOM stabilisation.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === "HELIXIS_ROUTE_CHANGED" && sender.tab?.id) {
+    const tabId = sender.tab.id;
+    (async () => {
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {
+          type: "HELIXIS_GET_LIGHT_CONTEXT",
+          tabId,
+        });
+        if (response) {
+          tabContextCache.set(tabId, response);
+        }
+      } catch {
+        tabContextCache.delete(tabId);
+      }
+    })();
+  }
+  // Don't return true — this listener doesn't use sendResponse
+});
+
 // ── Message Routing ───────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

@@ -613,7 +613,184 @@ function elVisible(el) {
 }
 
 // ============================================================================
-// CONTEXT ENGINE — ORCHESTRATOR
+// CONFIDENCE THRESHOLDS
+// ============================================================================
+
+const CONFIDENCE_HIGH = 0.75;
+const CONFIDENCE_MEDIUM = 0.50;
+
+function confidenceLevel(score) {
+  if (score >= CONFIDENCE_HIGH) return "high";
+  if (score >= CONFIDENCE_MEDIUM) return "medium";
+  return "low";
+}
+
+function filterByConfidence(items, min = CONFIDENCE_MEDIUM) {
+  if (!items) return [];
+  return items.filter(i => i.confidence >= min);
+}
+
+// ============================================================================
+// BUILDIUM ADAPTER
+// ============================================================================
+
+const BUILDIUM_URL_RULES = [
+  { regex: /\/rentals\/properties\/detail/i, type: "property", label: "Property detail" },
+  { regex: /\/rentals\/properties/i,         type: "property", label: "Properties list" },
+  { regex: /\/rentals\/units\/detail/i,      type: "unit",     label: "Unit detail" },
+  { regex: /\/rentals\/units/i,              type: "unit",     label: "Units list" },
+  { regex: /\/rentals\/tenants\/detail/i,    type: "tenant",   label: "Tenant detail" },
+  { regex: /\/rentals\/tenants/i,            type: "tenant",   label: "Tenants list" },
+  { regex: /\/rentals\/leases\/detail/i,     type: "lease",    label: "Lease detail" },
+  { regex: /\/rentals\/leases/i,             type: "lease",    label: "Leases list" },
+  { regex: /\/maintenance\/workorders\/detail/i, type: "maintenance", label: "Work order detail" },
+  { regex: /\/maintenance\/workorders/i,     type: "maintenance", label: "Work orders list" },
+  { regex: /\/maintenance/i,                 type: "maintenance", label: "Maintenance" },
+  { regex: /\/accounting\/payments/i,        type: "accounting", label: "Payments" },
+  { regex: /\/accounting\/invoices/i,        type: "accounting", label: "Invoices" },
+  { regex: /\/accounting/i,                  type: "accounting", label: "Accounting" },
+  { regex: /\/messages/i,                    type: "messages",   label: "Messages" },
+  { regex: /\/documents/i,                   type: "document",   label: "Documents" },
+  { regex: /\/reports/i,                     type: "report",     label: "Reports" },
+  { regex: /\/settings/i,                    type: "settings",   label: "Settings" },
+  { regex: /\/dashboard|\/home|\/$|^\/$/i,   type: "dashboard",  label: "Dashboard" },
+];
+
+const BUILDIUM_ENTITY_URL_RULES = [
+  { regex: /\/rentals\/properties\/detail\/(\d+)/i,      type: "property" },
+  { regex: /\/rentals\/units\/detail\/(\d+)/i,           type: "unit" },
+  { regex: /\/rentals\/tenants\/detail\/(\d+)/i,         type: "tenant" },
+  { regex: /\/rentals\/leases\/detail\/(\d+)/i,          type: "lease" },
+  { regex: /\/maintenance\/workorders\/detail\/(\d+)/i,  type: "maintenance_issue" },
+];
+
+function isBuildium() {
+  return location.hostname.toLowerCase().includes("buildium.com");
+}
+
+function buildiumClassify(url) {
+  let pathname = "";
+  try { pathname = new URL(url).pathname; } catch { return null; }
+  const lower = pathname.toLowerCase();
+  for (const rule of BUILDIUM_URL_RULES) {
+    if (rule.regex.test(lower)) {
+      return {
+        pageType: rule.type, confidence: 0.95, method: "adapter",
+        software: "buildium", signals: [`Buildium URL: ${rule.label}`],
+      };
+    }
+  }
+  return null;
+}
+
+function buildiumExtractEntities(pageType) {
+  const clues = { properties: [], units: [], tenants: [] };
+
+  const detailHeader =
+    document.querySelector(".detail-header h1, .page-header h1, [class*='detail'] h1") ||
+    document.querySelector("h1");
+
+  if (detailHeader) {
+    const name = detailHeader.textContent.trim();
+    if (name.length > 1 && name.length < 100) {
+      if (pageType === "property") clues.properties.push({ value: name, field: "name", confidence: 0.9, source: "adapter" });
+      else if (pageType === "unit") clues.units.push({ value: name, field: "number", confidence: 0.9, source: "adapter" });
+      else if (pageType === "tenant") clues.tenants.push({ value: name, field: "name", confidence: 0.9, source: "adapter" });
+    }
+  }
+
+  const detailRows = document.querySelectorAll(".detail-row, .info-row, [class*='detail-info'] .row, dl dt");
+  for (const row of detailRows) {
+    const label = (row.textContent || "").trim().toLowerCase();
+    const valueEl = row.nextElementSibling;
+    if (!valueEl) continue;
+    const value = valueEl.textContent.trim();
+    if (!value || value.length > 200) continue;
+
+    if (label.includes("property")) clues.properties.push({ value, field: "name", confidence: 0.85, source: "adapter" });
+    else if (label.includes("unit") || label.includes("apartment")) clues.units.push({ value, field: "number", confidence: 0.85, source: "adapter" });
+    else if (label.includes("tenant") || label.includes("resident")) clues.tenants.push({ value, field: "name", confidence: 0.85, source: "adapter" });
+    else if (label.includes("address")) clues.properties.push({ value, field: "address", confidence: 0.8, source: "adapter" });
+    else if (label.includes("email")) clues.tenants.push({ value, field: "email", confidence: 0.8, source: "adapter" });
+    else if (label.includes("phone")) clues.tenants.push({ value, field: "phone", confidence: 0.75, source: "adapter" });
+
+    if (clues.properties.length + clues.units.length + clues.tenants.length >= 10) break;
+  }
+
+  const total = clues.properties.length + clues.units.length + clues.tenants.length;
+  return total > 0 ? clues : null;
+}
+
+function buildiumUrlToEntityId(url) {
+  let pathname = "";
+  try { pathname = new URL(url).pathname; } catch { return null; }
+  for (const rule of BUILDIUM_ENTITY_URL_RULES) {
+    const match = pathname.match(rule.regex);
+    if (match) return { type: rule.type, id: match[1] };
+  }
+  return null;
+}
+
+// ============================================================================
+// RETRIEVAL INTENT MODEL
+// ============================================================================
+
+const RETRIEVAL_MAP = {
+  tenant:      { fetchTypes: ["tenant","lease","unit","property"], fetchTasks: true, fetchPolicies: true, policyCategories: ["support","legal"], priority: "full" },
+  property:    { fetchTypes: ["property","unit","tenant"],         fetchTasks: true, fetchPolicies: true, policyCategories: ["operations"], priority: "full" },
+  unit:        { fetchTypes: ["unit","property","tenant","lease"], fetchTasks: true, fetchPolicies: false, policyCategories: [], priority: "full" },
+  lease:       { fetchTypes: ["lease","tenant","unit","property"], fetchTasks: true, fetchPolicies: true, policyCategories: ["legal"], priority: "full" },
+  maintenance: { fetchTypes: ["maintenance_issue","property","unit","tenant"], fetchTasks: true, fetchPolicies: true, policyCategories: ["operations","support"], priority: "full" },
+  accounting:  { fetchTypes: ["payment","tenant","lease"],         fetchTasks: true, fetchPolicies: true, policyCategories: ["legal"], priority: "full" },
+  messages:    { fetchTypes: ["tenant","owner"],                   fetchTasks: false, fetchPolicies: true, policyCategories: ["support"], priority: "partial" },
+  dashboard:   { fetchTypes: [],                                   fetchTasks: true, fetchPolicies: false, policyCategories: [], priority: "partial" },
+  document:    { fetchTypes: [],                                   fetchTasks: false, fetchPolicies: false, policyCategories: [], priority: "minimal" },
+  settings:    { fetchTypes: [],                                   fetchTasks: false, fetchPolicies: false, policyCategories: [], priority: "minimal" },
+  report:      { fetchTypes: [],                                   fetchTasks: false, fetchPolicies: false, policyCategories: [], priority: "minimal" },
+  contact:     { fetchTypes: ["tenant","owner"],                   fetchTasks: false, fetchPolicies: true, policyCategories: ["support"], priority: "partial" },
+  search:      { fetchTypes: [],                                   fetchTasks: false, fetchPolicies: false, policyCategories: [], priority: "minimal" },
+  login:       { fetchTypes: [],                                   fetchTasks: false, fetchPolicies: false, policyCategories: [], priority: "minimal" },
+  unknown:     { fetchTypes: [],                                   fetchTasks: false, fetchPolicies: false, policyCategories: [], priority: "minimal" },
+};
+
+function buildRetrievalIntent(ctx) {
+  const pageType = ctx.classification?.pageType || "unknown";
+  const config = RETRIEVAL_MAP[pageType] || RETRIEVAL_MAP.unknown;
+
+  const entityHints = [];
+
+  // Build entity hints from medium+ confidence clues
+  for (const [groupKey, hintType] of [["properties","property"],["units","unit"],["tenants","tenant"]]) {
+    const group = filterByConfidence(ctx.entities?.[groupKey], CONFIDENCE_MEDIUM);
+    if (group.length > 0) {
+      const fields = {};
+      for (const clue of group) fields[clue.field] = clue.value;
+      entityHints.push({ type: hintType, fields });
+    }
+  }
+
+  // Fallback: identifier-based hints
+  if (entityHints.length === 0 && ctx.identifiers) {
+    if (ctx.identifiers.emails?.length) entityHints.push({ type: "contact", fields: { email: ctx.identifiers.emails[0].normalized } });
+    if (ctx.identifiers.referenceIds?.length) entityHints.push({ type: "reference", fields: { id: ctx.identifiers.referenceIds[0].normalized } });
+  }
+
+  // Buildium entity ID from URL
+  const urlEntity = buildiumUrlToEntityId(ctx.raw.url);
+  if (urlEntity) {
+    entityHints.push({ type: urlEntity.type, fields: { external_id: urlEntity.id, provider: "buildium" } });
+  }
+
+  return {
+    pageType,
+    software: ctx.classification?.software || null,
+    entityHints,
+    ...config,
+  };
+}
+
+// ============================================================================
+// CONTEXT ENGINE — ORCHESTRATOR (with adapter + intent support)
 // ============================================================================
 
 function captureFullContext(tabId) {
@@ -623,11 +800,39 @@ function captureFullContext(tabId) {
 
   ctx.selectedText = captureSelectedText();
   ctx.visibleTextSummary = captureVisibleTextSummary();
-  ctx.classification = classifyPage(ctx.raw.url, ctx.raw.pageTitle, ctx.visibleTextSummary);
-  ctx.identifiers = extractIdentifiers(ctx.visibleTextSummary);
-  ctx.entities = extractEntities(ctx.classification.pageType, ctx.identifiers);
-  ctx.captureMs = Math.round(performance.now() - start);
 
+  // Try adapter-specific classification first
+  if (isBuildium()) {
+    const adapterClass = buildiumClassify(ctx.raw.url);
+    if (adapterClass) {
+      ctx.classification = adapterClass;
+    } else {
+      ctx.classification = classifyPage(ctx.raw.url, ctx.raw.pageTitle, ctx.visibleTextSummary);
+    }
+  } else {
+    ctx.classification = classifyPage(ctx.raw.url, ctx.raw.pageTitle, ctx.visibleTextSummary);
+  }
+
+  ctx.identifiers = extractIdentifiers(ctx.visibleTextSummary);
+
+  // Try adapter-specific entity extraction first, merge with generic
+  let adapterEntities = null;
+  if (isBuildium()) {
+    adapterEntities = buildiumExtractEntities(ctx.classification.pageType);
+  }
+
+  const genericEntities = extractEntities(ctx.classification.pageType, ctx.identifiers);
+
+  // Merge: adapter results win on duplicates (higher confidence)
+  ctx.entities = mergeEntities(adapterEntities, genericEntities);
+
+  // Build retrieval intent
+  ctx.retrievalIntent = buildRetrievalIntent(ctx);
+
+  // Source attribution summary
+  ctx.sources = summarizeContextSources(ctx);
+
+  ctx.captureMs = Math.round(performance.now() - start);
   return ctx;
 }
 
@@ -636,14 +841,139 @@ function captureLightContext(tabId) {
   let hostname = "";
   try { hostname = new URL(url).hostname; } catch { /* */ }
   const title = document.title || "";
-  const summary = captureVisibleTextSummary();
-  const cls = classifyPage(url, title, summary);
+
+  // Fast path: adapter classification if available
+  let cls = null;
+  if (isBuildium()) cls = buildiumClassify(url);
+  if (!cls) {
+    const summary = captureVisibleTextSummary();
+    cls = classifyPage(url, title, summary);
+  }
 
   return {
     tabId, url, hostname, pageTitle: title,
     pageType: cls.pageType, software: cls.software, timestamp: Date.now(),
   };
 }
+
+function mergeEntities(adapter, generic) {
+  if (!adapter) return generic || { properties: [], units: [], tenants: [] };
+  if (!generic) return adapter;
+
+  const merged = { properties: [], units: [], tenants: [] };
+  for (const key of ["properties", "units", "tenants"]) {
+    const seen = new Map();
+    // Adapter results first (higher confidence)
+    for (const c of (adapter[key] || [])) {
+      seen.set(`${c.field}:${c.value.toLowerCase()}`, c);
+    }
+    for (const c of (generic[key] || [])) {
+      const k = `${c.field}:${c.value.toLowerCase()}`;
+      if (!seen.has(k)) seen.set(k, c);
+    }
+    merged[key] = [...seen.values()].slice(0, 10);
+  }
+  return merged;
+}
+
+function summarizeContextSources(ctx) {
+  const counts = {};
+  function inc(s) { counts[s] = (counts[s] || 0) + 1; }
+
+  if (ctx.classification?.method) inc(ctx.classification.method);
+  for (const group of [ctx.entities?.properties, ctx.entities?.units, ctx.entities?.tenants]) {
+    if (!group) continue;
+    for (const clue of group) if (clue.source) inc(clue.source);
+  }
+  if (ctx.selectedText) inc("selection");
+
+  return Object.entries(counts).map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count);
+}
+
+// ============================================================================
+// SPA ROUTE-CHANGE DETECTION
+// ============================================================================
+
+(function initSPAObserver() {
+  let lastUrl = location.href;
+  let debounceTimer = null;
+  let mutationObs = null;
+
+  function onRouteChange(newUrl, method) {
+    // Notify the service worker that the page changed
+    try {
+      chrome.runtime.sendMessage({
+        type: "HELIXIS_ROUTE_CHANGED",
+        url: newUrl,
+        method,
+        timestamp: Date.now(),
+      });
+    } catch { /* extension context invalidated */ }
+  }
+
+  function handleChange(method) {
+    const newUrl = location.href;
+    if (newUrl === lastUrl) return;
+    lastUrl = newUrl;
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      waitForDOMStable(() => onRouteChange(newUrl, method));
+    }, 300);
+  }
+
+  // Intercept history.pushState / replaceState
+  const origPush = history.pushState;
+  const origReplace = history.replaceState;
+  history.pushState = function(...args) { origPush.apply(this, args); handleChange("pushState"); };
+  history.replaceState = function(...args) { origReplace.apply(this, args); handleChange("replaceState"); };
+
+  window.addEventListener("popstate", () => handleChange("popstate"));
+  window.addEventListener("hashchange", () => handleChange("hashchange"));
+
+  // URL poll fallback (catches edge cases)
+  setInterval(() => {
+    if (location.href !== lastUrl) handleChange("poll");
+  }, 500);
+
+  function waitForDOMStable(callback) {
+    if (mutationObs) mutationObs.disconnect();
+
+    const target = document.querySelector("main") || document.querySelector('[role="main"]') || document.body;
+    if (!target) { callback(); return; }
+
+    let settled = false;
+    let changeCount = 0;
+    const settleTimer = setTimeout(() => settle(), 2000);
+
+    function settle() {
+      if (settled) return;
+      settled = true;
+      if (mutationObs) mutationObs.disconnect();
+      clearTimeout(settleTimer);
+      callback();
+    }
+
+    mutationObs = new MutationObserver((mutations) => {
+      for (const mut of mutations) {
+        if (mut.type === "childList") {
+          for (const node of mut.addedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const tag = node.tagName?.toLowerCase();
+              if (tag === "h1" || tag === "h2" || tag === "table" || node.querySelector?.("h1, h2, table")) {
+                settle(); return;
+              }
+              changeCount++;
+            }
+          }
+        }
+      }
+      if (changeCount > 20) settle();
+    });
+
+    mutationObs.observe(target, { childList: true, subtree: true });
+  }
+})();
 
 // ============================================================================
 // MESSAGE HANDLER
@@ -668,5 +998,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     default:
       break;
   }
-  return true; // keep channel open for async
+  return true;
 });
