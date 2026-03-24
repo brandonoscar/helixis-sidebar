@@ -18,130 +18,126 @@
       </div>
       <span class="header-title">Helixis Copilot</span>
     </div>
-    <div class="status-pill">
+    <div class="status-pill" id="statusPill">
       <span class="status-dot"></span>
-      Ready
+      <span id="statusText">Ready</span>
     </div>
   </header>
 
   <!-- ── CONTEXT STRIP ──────────────────────────────── -->
-  <div class="context-strip">
+  <div class="context-strip" id="contextStrip">
     <div class="context-label">Active Context</div>
     <div class="context-value">
-      <div class="context-favicon">
+      <div class="context-favicon" id="contextFavicon">
         <svg viewBox="0 0 8 8" fill="none">
           <circle cx="4" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/>
         </svg>
       </div>
-      <span class="context-url is-empty" id="contextDisplay">No active context</span>
+      <span class="context-url" id="contextDisplay">Waiting for page...</span>
     </div>
+    <div class="context-meta" id="contextMeta"></div>
   </div>
+
+  <!-- ── TAB BAR ─────────────────────────────────────── -->
+  <nav class="tab-bar">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="tasks">Tasks</button>
+    <button class="tab" data-tab="chat">Chat</button>
+  </nav>
 
   <!-- ── MAIN ───────────────────────────────────────── -->
   <main class="main">
 
-    <!-- Primary Action Card -->
-    <div class="card card-primary" id="primaryCard" role="button" tabindex="0" aria-label="Read page context">
-      <div class="card-body">
-        <div class="card-header-row">
-          <div class="card-icon card-icon-primary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="card-text">
-            <div class="card-title">Read Page Context</div>
-            <div class="card-desc">Extract visible text content from the active tab.</div>
-          </div>
-          <div class="card-badge">Primary</div>
+    <!-- OVERVIEW TAB -->
+    <div class="tab-panel active" id="tab-overview">
+
+      <!-- Detected Entities -->
+      <section class="section" id="entitiesSection" style="display:none">
+        <div class="section-header">
+          <span class="section-title">Detected Entities</span>
+          <span class="section-badge" id="entityCount">0</span>
         </div>
+        <div class="entity-list" id="entityList"></div>
+      </section>
+
+      <!-- Related Tasks -->
+      <section class="section" id="relatedTasksSection" style="display:none">
+        <div class="section-header">
+          <span class="section-title">Related Tasks</span>
+          <span class="section-badge" id="relatedTaskCount">0</span>
+        </div>
+        <div class="task-list" id="relatedTaskList"></div>
+      </section>
+
+      <!-- AI Insight -->
+      <section class="section" id="aiInsightSection" style="display:none">
+        <div class="section-header">
+          <span class="section-title">AI Insight</span>
+        </div>
+        <div class="insight-card" id="aiInsightCard"></div>
+      </section>
+
+      <!-- Recent Activity -->
+      <section class="section" id="activitySection" style="display:none">
+        <div class="section-header">
+          <span class="section-title">Recent Activity</span>
+        </div>
+        <div class="activity-list" id="activityList"></div>
+      </section>
+
+      <!-- Empty State -->
+      <div class="empty-state" id="overviewEmpty">
+        <div class="empty-icon">
+          <svg viewBox="0 0 18 18" fill="none">
+            <path d="M9 3v9M5.5 8.5L9 12l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 14.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="empty-title">Navigate to get started</div>
+        <div class="empty-desc">Open a property management page to see context, entities, and tasks here.</div>
       </div>
     </div>
 
-    <!-- Loading Card -->
-    <div class="card loading-card" id="loadingCard">
-      <div class="spinner"></div>
-      Reading page content…
+    <!-- TASKS TAB -->
+    <div class="tab-panel" id="tab-tasks">
+      <div class="tasks-header">
+        <span class="section-title">All Tasks</span>
+        <button class="btn btn-sm" id="refreshTasksBtn">Refresh</button>
+      </div>
+      <div class="task-list" id="allTaskList"></div>
+      <div class="empty-state" id="tasksEmpty">
+        <div class="empty-icon">
+          <svg viewBox="0 0 18 18" fill="none">
+            <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M6.5 9l2 2 3.5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="empty-title">No tasks yet</div>
+        <div class="empty-desc">Tasks will appear here when created from webhooks or manually.</div>
+      </div>
     </div>
 
-    <!-- Output Card -->
-    <div class="card output-card" id="outputCard">
-      <div class="output-header">
-        <span class="output-label">Page Context</span>
-        <button class="output-close" id="outputClose" title="Clear output">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- CHAT TAB -->
+    <div class="tab-panel" id="tab-chat">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon">
+            <svg viewBox="0 0 18 18" fill="none">
+              <path d="M3 13.5V4.5a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6.5L3 15V13.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="chat-welcome-title">Helixis AI Assistant</div>
+          <div class="chat-welcome-desc">Ask about properties, tenants, leases, or maintenance. I'll use your current page context to help.</div>
+        </div>
+      </div>
+      <div class="chat-input-bar">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Ask about this page..." />
+        <button class="chat-send" id="chatSend">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M2.5 8h11M9 3.5L13.5 8 9 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
-      <div class="output-body" id="outputBody"></div>
-    </div>
-
-    <!-- Secondary Action Grid -->
-    <div class="cards-grid">
-
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="card-title">Summarize</div>
-          <div class="card-desc">AI summary of page</div>
-        </div>
-      </div>
-
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M8 5.5v3l1.75 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="card-title">Analyze</div>
-          <div class="card-desc">Deep page analysis</div>
-        </div>
-      </div>
-
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="card-title">Draft Reply</div>
-          <div class="card-desc">Compose a response</div>
-        </div>
-      </div>
-
-      <div class="card card-sm card-disabled">
-        <div class="card-body">
-          <div class="card-icon card-icon-secondary">
-            <svg viewBox="0 0 16 16" fill="none">
-              <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="card-title">Actions</div>
-          <div class="card-desc">Run page actions</div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Empty State -->
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon">
-        <svg viewBox="0 0 18 18" fill="none">
-          <path d="M9 3v9M5.5 8.5L9 12l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3 14.5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
-        </svg>
-      </div>
-      <div class="empty-title">Nothing here yet</div>
-      <div class="empty-desc">Click "Read Page Context" above to pull content from the active tab.</div>
     </div>
 
   </main>
@@ -149,10 +145,10 @@
   <!-- ── FOOTER ─────────────────────────────────────── -->
   <footer class="footer">
     <div class="footer-status">
-      <div class="footer-dot"></div>
-      Connected · Ready
+      <div class="footer-dot" id="footerDot"></div>
+      <span id="footerStatusText">Ready</span>
     </div>
-    <span class="footer-version">v0.0.1</span>
+    <span class="footer-version">v0.2.0</span>
   </footer>
 
   <script src="panel.js"></script>
