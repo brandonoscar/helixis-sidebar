@@ -548,6 +548,94 @@ body {
   font-style: italic;
 }
 
+/* ─── STRUCTURED AI RESPONSE ────────────────────────── */
+
+.ai-summary {
+  margin-bottom: 8px;
+  line-height: 1.55;
+}
+
+.ai-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+.ai-action, .ai-why, .ai-policies {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.ai-action span:last-child { color: var(--accent); font-weight: 500; }
+
+.ai-policies ul {
+  margin: 4px 0 0 14px;
+  padding: 0;
+  list-style: disc;
+}
+
+.ai-policies li {
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ai-confidence {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.confidence-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.confidence-high .confidence-dot { background: var(--success); }
+.confidence-high { color: var(--success); }
+.confidence-medium .confidence-dot { background: var(--warning); }
+.confidence-medium { color: var(--warning); }
+.confidence-low .confidence-dot { background: var(--danger); }
+.confidence-low { color: var(--danger); }
+
+.ai-followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.followup-btn {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: all var(--ease);
+  text-align: left;
+}
+
+.followup-btn:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .chat-input-bar {
   display: flex;
   gap: 8px;

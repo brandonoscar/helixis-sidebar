@@ -12,10 +12,10 @@
  *   }});
  *
  * The extension reads this config on panel open.
- * All third-party secrets (Buildium API keys, Anthropic key) stay server-side.
+ * All third-party secrets (Buildium API keys, Gemini key) stay server-side.
  *
  * Required Supabase Edge Function secrets (set via Supabase dashboard):
- *   - ANTHROPIC_API_KEY: For AI chat responses
+ *   - GEMINI_API_KEY: For AI chat responses (Google Gemini)
  *
  * Required Supabase Vault secrets (per workspace):
  *   - Buildium API client ID

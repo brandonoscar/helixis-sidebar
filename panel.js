@@ -346,15 +346,22 @@ async function sendChatMessage() {
   if (!message) return;
 
   chatInput.value = "";
+  chatInput.disabled = true;
+  chatSend.disabled = true;
   appendChatBubble("user", message);
 
   if (!isConfigured()) {
-    appendChatBubble("assistant", "Helixis backend is not configured yet. Set up your workspace in the onboarding flow to enable AI chat.");
+    appendChatBubble("assistant", null, false, {
+      summary: "Helixis backend is not configured yet.",
+      recommended_action: "Set up your workspace in the onboarding flow to enable AI chat.",
+      confidence: "low",
+    });
+    chatInput.disabled = false;
+    chatSend.disabled = false;
     return;
   }
 
-  // Show typing indicator
-  const typingEl = appendChatBubble("assistant", "...", true);
+  const typingEl = appendChatBubble("assistant", "Thinking...", true);
 
   const result = await apiCall("ai-chat", {
     workspaceId: CONFIG.workspaceId,
@@ -364,29 +371,108 @@ async function sendChatMessage() {
   });
 
   typingEl.remove();
+  chatInput.disabled = false;
+  chatSend.disabled = false;
+  chatInput.focus();
 
-  if (result?.reply) {
+  if (result?.structured) {
+    appendChatBubble("assistant", result.reply, false, result.structured);
+    chatHistory.push({ role: "user", content: message });
+    chatHistory.push({ role: "assistant", content: result.reply });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  } else if (result?.reply) {
     appendChatBubble("assistant", result.reply);
     chatHistory.push({ role: "user", content: message });
     chatHistory.push({ role: "assistant", content: result.reply });
-    // Keep history manageable
     if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
   } else {
-    appendChatBubble("assistant", "Sorry, I couldn't get a response. Please check your configuration.");
+    appendChatBubble("assistant", null, false, {
+      summary: "Sorry, I couldn't get a response.",
+      recommended_action: "Check your configuration or try again.",
+      confidence: "low",
+    });
   }
 }
 
-function appendChatBubble(role, content, isTyping = false) {
-  // Remove welcome message on first interaction
+function appendChatBubble(role, text, isTyping = false, structured = null) {
   const welcome = chatMessages.querySelector(".chat-welcome");
   if (welcome) welcome.remove();
 
   const bubble = document.createElement("div");
   bubble.className = `chat-bubble chat-${role}${isTyping ? " typing" : ""}`;
-  bubble.textContent = content;
+
+  if (role === "user" || isTyping || !structured) {
+    bubble.textContent = text || "";
+  } else {
+    bubble.innerHTML = renderStructuredResponse(structured);
+  }
+
   chatMessages.appendChild(bubble);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+
+  // Wire follow-up question clicks
+  if (structured?.follow_up_questions?.length) {
+    bubble.querySelectorAll(".followup-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        chatInput.value = btn.textContent;
+        sendChatMessage();
+      });
+    });
+  }
+
   return bubble;
+}
+
+function renderStructuredResponse(s) {
+  const parts = [];
+
+  // Summary (always shown)
+  if (s.summary) {
+    parts.push(`<div class="ai-summary">${escapeHtml(s.summary)}</div>`);
+  }
+
+  // Recommended action
+  if (s.recommended_action) {
+    parts.push(`<div class="ai-action">
+      <span class="ai-label">Recommended</span>
+      <span>${escapeHtml(s.recommended_action)}</span>
+    </div>`);
+  }
+
+  // Why it matters
+  if (s.why_it_matters) {
+    parts.push(`<div class="ai-why">
+      <span class="ai-label">Why it matters</span>
+      <span>${escapeHtml(s.why_it_matters)}</span>
+    </div>`);
+  }
+
+  // Relevant policies
+  if (s.relevant_policies?.length > 0) {
+    const pols = s.relevant_policies.map((p) => `<li>${escapeHtml(p)}</li>`).join("");
+    parts.push(`<div class="ai-policies">
+      <span class="ai-label">Policies</span>
+      <ul>${pols}</ul>
+    </div>`);
+  }
+
+  // Confidence indicator
+  if (s.confidence) {
+    parts.push(`<div class="ai-confidence confidence-${s.confidence}">
+      <span class="confidence-dot"></span>
+      ${capitalize(s.confidence)} confidence
+    </div>`);
+  }
+
+  // Follow-up questions
+  if (s.follow_up_questions?.length > 0) {
+    const btns = s.follow_up_questions
+      .map((q) => `<button class="followup-btn">${escapeHtml(q)}</button>`)
+      .join("");
+    parts.push(`<div class="ai-followups">${btns}</div>`);
+  }
+
+  return parts.join("");
 }
 
 chatSend.addEventListener("click", sendChatMessage);
