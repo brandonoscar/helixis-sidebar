@@ -1,23 +1,25 @@
 /**
- * Helixis Copilot — Panel JS
+ * Helixis Copilot — Panel JS (v0.3.0)
  *
- * Handles:
- * - Tab navigation
- * - Auto-loading context on panel open / tab switch / route change
- * - Rendering entities, tasks, AI insights
- * - Chat with AI backend
- * - Task status updates
- *
- * Config is loaded from chrome.storage.local (set during onboarding):
- *   { supabaseUrl, supabaseAnonKey, workspaceId }
+ * Features:
+ * - Auth: login/logout with Supabase email+password
+ * - Onboarding: generate business AI profile from answers
+ * - Context: detect page, entities, tasks, activity
+ * - AI Insights: proactive per-page insights on Overview tab
+ * - Chat: structured AI responses, chat history loading, task creation from chat
+ * - Tasks: list, status updates, polling for live updates
+ * - Settings: AI memory management, business profile status, logout
+ * - Error handling: connection banner, retry
  */
 
-// ─── Config ──────────────────────────────────────────────────────────
+// ─── Config & State ─────────────────────────────────────────────────
 
 let CONFIG = { supabaseUrl: null, supabaseAnonKey: null, workspaceId: null, accessToken: null };
 let currentContext = null;
 let currentSessionId = null;
 let chatHistory = [];
+let chatHistoryLoaded = false;
+let connectionOk = true;
 
 async function loadConfig() {
   return new Promise((resolve) => {
@@ -30,11 +32,21 @@ async function loadConfig() {
   });
 }
 
+async function saveConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ helixisConfig: CONFIG }, resolve);
+  });
+}
+
 function isConfigured() {
   return CONFIG.supabaseUrl && CONFIG.supabaseAnonKey && CONFIG.workspaceId;
 }
 
-// ─── API Client ──────────────────────────────────────────────────────
+function isLoggedIn() {
+  return isConfigured() && CONFIG.accessToken;
+}
+
+// ─── API Client ─────────────────────────────────────────────────────
 
 async function apiCall(functionName, body) {
   if (!isConfigured()) return null;
@@ -55,17 +67,169 @@ async function apiCall(functionName, body) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
+      if (res.status === 401) handleAuthExpired();
       console.warn(`API ${functionName} failed:`, res.status);
       return null;
     }
+    showConnectionOk();
     return await res.json();
   } catch (err) {
     console.warn(`API ${functionName} error:`, err);
+    showConnectionError();
     return null;
   }
 }
 
-// ─── Tab Navigation ──────────────────────────────────────────────────
+// Supabase Auth REST call (not edge function)
+async function supabaseAuth(endpoint, body) {
+  if (!CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey) return null;
+  try {
+    const res = await fetch(`${CONFIG.supabaseUrl}/auth/v1/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": CONFIG.supabaseAnonKey,
+      },
+      body: JSON.stringify(body),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn("Auth error:", err);
+    return null;
+  }
+}
+
+// ─── Screen Navigation ──────────────────────────────────────────────
+
+function showScreen(screenId) {
+  document.querySelectorAll(".screen").forEach((s) => (s.style.display = "none"));
+  const el = document.getElementById(screenId);
+  if (el) el.style.display = "";
+}
+
+// ─── Auth: Login ────────────────────────────────────────────────────
+
+const loginForm = document.getElementById("loginForm");
+const loginError = document.getElementById("loginError");
+
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    loginError.textContent = "";
+    const btn = document.getElementById("loginSubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "Signing in...";
+
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+
+    const result = await supabaseAuth("token?grant_type=password", { email, password });
+
+    if (result?.access_token) {
+      CONFIG.accessToken = result.access_token;
+      await saveConfig();
+      await initApp();
+    } else {
+      loginError.textContent = result?.error_description || result?.msg || "Sign in failed. Check your credentials.";
+    }
+    btn.disabled = false;
+    btn.textContent = "Sign In";
+  });
+}
+
+function handleAuthExpired() {
+  CONFIG.accessToken = null;
+  saveConfig();
+  showScreen("loginScreen");
+}
+
+// ─── Auth: Logout ───────────────────────────────────────────────────
+
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    CONFIG.accessToken = null;
+    await saveConfig();
+    chatHistory = [];
+    chatHistoryLoaded = false;
+    showScreen("loginScreen");
+  });
+}
+
+// ─── Onboarding: AI Profile Generation ──────────────────────────────
+
+const onboardingForm = document.getElementById("onboardingForm");
+const onboardingError = document.getElementById("onboardingError");
+const skipOnboardingBtn = document.getElementById("skipOnboardingBtn");
+
+if (onboardingForm) {
+  onboardingForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    onboardingError.textContent = "";
+    const btn = document.getElementById("onboardingSubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "Generating...";
+
+    const result = await apiCall("generate-ai-profile", {
+      workspaceId: CONFIG.workspaceId,
+      businessName: document.getElementById("obBusinessName").value.trim(),
+      onboardingAnswers: {
+        portfolioSize: document.getElementById("obPortfolio").value.trim(),
+        maintenanceProcess: document.getElementById("obMaintenance").value.trim(),
+        leasingProcess: document.getElementById("obLeasing").value.trim(),
+        paymentPolicy: document.getElementById("obPayment").value.trim(),
+        ownerRelationship: document.getElementById("obOwnerApproval").value.trim(),
+        communicationPreferences: document.getElementById("obCommunication").value.trim(),
+        thingsToAvoid: document.getElementById("obDoNotDo").value.trim(),
+        specialRules: document.getElementById("obCustom").value.trim(),
+      },
+    });
+
+    if (result?.profile) {
+      showScreen("appScreen");
+      initContext();
+    } else {
+      onboardingError.textContent = "Failed to generate profile. You can skip and set it up later.";
+    }
+    btn.disabled = false;
+    btn.textContent = "Generate AI Profile";
+  });
+}
+
+if (skipOnboardingBtn) {
+  skipOnboardingBtn.addEventListener("click", () => {
+    showScreen("appScreen");
+    initContext();
+  });
+}
+
+// ─── Connection Error Handling (#10) ────────────────────────────────
+
+function showConnectionError() {
+  if (connectionOk) {
+    connectionOk = false;
+    const banner = document.getElementById("connectionBanner");
+    if (banner) banner.style.display = "";
+  }
+}
+
+function showConnectionOk() {
+  if (!connectionOk) {
+    connectionOk = true;
+    const banner = document.getElementById("connectionBanner");
+    if (banner) banner.style.display = "none";
+  }
+}
+
+const retryBtn = document.getElementById("retryConnectionBtn");
+if (retryBtn) {
+  retryBtn.addEventListener("click", () => {
+    showConnectionOk();
+    initContext();
+  });
+}
+
+// ─── Tab Navigation ─────────────────────────────────────────────────
 
 const tabs = document.querySelectorAll(".tab");
 const panels = document.querySelectorAll(".tab-panel");
@@ -77,19 +241,102 @@ tabs.forEach((tab) => {
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
 
-    // Load tasks when switching to tasks tab
     if (tab.dataset.tab === "tasks") loadAllTasks();
+    if (tab.dataset.tab === "chat" && !chatHistoryLoaded) loadChatHistory();
   });
 });
 
-// ─── Context Handling ────────────────────────────────────────────────
+// ─── Settings Drawer (#7) ───────────────────────────────────────────
+
+const settingsToggle = document.getElementById("settingsToggle");
+const settingsClose = document.getElementById("settingsClose");
+const settingsDrawer = document.getElementById("settingsDrawer");
+
+if (settingsToggle) {
+  settingsToggle.addEventListener("click", () => {
+    settingsDrawer.style.display = settingsDrawer.style.display === "none" ? "" : "none";
+    if (settingsDrawer.style.display !== "none") loadMemories();
+  });
+}
+if (settingsClose) {
+  settingsClose.addEventListener("click", () => {
+    settingsDrawer.style.display = "none";
+  });
+}
+
+const editProfileBtn = document.getElementById("editProfileBtn");
+if (editProfileBtn) {
+  editProfileBtn.addEventListener("click", () => {
+    settingsDrawer.style.display = "none";
+    showScreen("onboardingScreen");
+  });
+}
+
+// ─── AI Memories (#7) ───────────────────────────────────────────────
+
+async function loadMemories() {
+  if (!isConfigured()) return;
+
+  // Direct Supabase REST query for memories
+  const url = `${CONFIG.supabaseUrl}/rest/v1/ai_memories?workspace_id=eq.${CONFIG.workspaceId}&active=eq.true&order=created_at.desc&limit=30`;
+  const headers = {
+    "apikey": CONFIG.supabaseAnonKey,
+    "Authorization": `Bearer ${CONFIG.accessToken}`,
+  };
+
+  try {
+    const res = await fetch(url, { headers });
+    if (!res.ok) return;
+    const memories = await res.json();
+    renderMemories(memories);
+  } catch {
+    // Silently fail
+  }
+}
+
+function renderMemories(memories) {
+  const list = document.getElementById("memoryList");
+  if (!list) return;
+
+  if (!memories?.length) {
+    list.innerHTML = '<div class="memory-empty">No memories yet. Chat with the AI and it will start learning.</div>';
+    return;
+  }
+
+  list.innerHTML = memories.map((m) => `
+    <div class="memory-item" data-memory-id="${m.id}">
+      <div class="memory-content">
+        <span class="memory-category">${escapeHtml(m.category)}</span>
+        <span>${escapeHtml(m.content)}</span>
+      </div>
+      <button class="memory-delete" data-memory-id="${m.id}" title="Delete">x</button>
+    </div>
+  `).join("");
+
+  list.querySelectorAll(".memory-delete").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.memoryId;
+      // Soft delete via REST
+      await fetch(`${CONFIG.supabaseUrl}/rest/v1/ai_memories?id=eq.${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": CONFIG.supabaseAnonKey,
+          "Authorization": `Bearer ${CONFIG.accessToken}`,
+        },
+        body: JSON.stringify({ active: false }),
+      });
+      btn.closest(".memory-item").remove();
+    });
+  });
+}
+
+// ─── Context Handling ───────────────────────────────────────────────
 
 function updateContextDisplay(ctx) {
   if (!ctx) return;
-
   currentContext = ctx;
 
-  // Update context strip
   const display = document.getElementById("contextDisplay");
   const meta = document.getElementById("contextMeta");
 
@@ -101,7 +348,6 @@ function updateContextDisplay(ctx) {
     display.classList.add("is-empty");
   }
 
-  // Show meta info if provider detected
   const metaParts = [];
   if (ctx.provider) metaParts.push(capitalize(ctx.provider));
   if (ctx.pageType && ctx.pageType !== "unknown") metaParts.push(formatPageType(ctx.pageType));
@@ -110,7 +356,6 @@ function updateContextDisplay(ctx) {
   meta.textContent = metaParts.join(" · ");
   meta.style.display = metaParts.length ? "" : "none";
 
-  // Update status
   if (ctx.provider) {
     setStatus("connected", `${capitalize(ctx.provider)} detected`);
   } else {
@@ -121,8 +366,6 @@ function updateContextDisplay(ctx) {
 function setStatus(state, text) {
   const pill = document.getElementById("statusPill");
   const statusText = document.getElementById("statusText");
-  const dot = pill.querySelector(".status-dot");
-
   statusText.textContent = text;
   pill.className = `status-pill status-${state}`;
 }
@@ -131,12 +374,10 @@ async function onContextUpdate(ctx) {
   updateContextDisplay(ctx);
 
   if (!isConfigured()) {
-    // Show entities locally even without backend
     renderLocalEntities(ctx);
     return;
   }
 
-  // Send to retrieval orchestrator
   setStatus("loading", "Loading...");
 
   const result = await apiCall("retrieve-context", {
@@ -153,13 +394,50 @@ async function onContextUpdate(ctx) {
     currentSessionId = result.sessionId;
     renderOverview(ctx, result);
     setStatus("connected", ctx.provider ? capitalize(ctx.provider) : "Connected");
+    // Fetch proactive AI insight (#2)
+    fetchInsight();
   } else {
     renderLocalEntities(ctx);
     setStatus("ready", "Ready");
   }
 }
 
-// ─── Rendering: Overview ─────────────────────────────────────────────
+// ─── Proactive AI Insights (#2) ─────────────────────────────────────
+
+async function fetchInsight() {
+  if (!currentSessionId || !isConfigured()) return;
+
+  const section = document.getElementById("aiInsightSection");
+  const card = document.getElementById("aiInsightCard");
+  const urgencyEl = document.getElementById("insightUrgency");
+  const actionEl = document.getElementById("insightAction");
+
+  card.textContent = "Analyzing page...";
+  section.style.display = "";
+
+  const result = await apiCall("ai-insight", {
+    workspaceId: CONFIG.workspaceId,
+    contextSessionId: currentSessionId,
+  });
+
+  if (result?.insight) {
+    card.textContent = result.insight;
+    if (urgencyEl && result.urgency) {
+      urgencyEl.textContent = result.urgency;
+      urgencyEl.className = `insight-urgency urgency-${result.urgency}`;
+    }
+    if (actionEl && result.action_hint) {
+      actionEl.textContent = result.action_hint;
+      actionEl.style.display = "";
+    } else if (actionEl) {
+      actionEl.style.display = "none";
+    }
+  } else {
+    section.style.display = "none";
+  }
+}
+
+// ─── Rendering: Overview ────────────────────────────────────────────
 
 function renderOverview(ctx, data) {
   const emptyEl = document.getElementById("overviewEmpty");
@@ -169,7 +447,6 @@ function renderOverview(ctx, data) {
 
   let hasContent = false;
 
-  // Entities
   if (data.entities?.length > 0 || ctx.entities?.length > 0) {
     hasContent = true;
     entSection.style.display = "";
@@ -178,7 +455,6 @@ function renderOverview(ctx, data) {
     entSection.style.display = "none";
   }
 
-  // Related tasks
   if (data.relatedTasks?.length > 0) {
     hasContent = true;
     taskSection.style.display = "";
@@ -195,7 +471,6 @@ function renderOverview(ctx, data) {
     taskSection.style.display = "none";
   }
 
-  // Recent activity
   if (data.recentEvents?.length > 0) {
     hasContent = true;
     activitySection.style.display = "";
@@ -238,15 +513,19 @@ function renderEntities(entities) {
     let details = "";
     if (ent.snapshot) {
       const s = ent.snapshot;
-      // Try to extract useful display fields from snapshot
       const name = s.Name || s.name || s.PropertyName || s.UnitNumber || "";
       const addr = s.Address?.AddressLine1 || s.address || "";
       if (name) details += `<div class="entity-detail">${escapeHtml(name)}</div>`;
       if (addr) details += `<div class="entity-detail sub">${escapeHtml(addr)}</div>`;
     }
 
+    // Deep link to Buildium (#extension gap: deep linking)
+    const buildiumLink = currentContext?.provider === "buildium" && currentContext?.hostname
+      ? `https://${currentContext.hostname}/manager/app/${ent.type === "workorder" ? "maintenance" : ent.type + "s"}/${id}`
+      : "";
+
     return `
-      <div class="entity-card">
+      <div class="entity-card${buildiumLink ? " entity-clickable" : ""}" ${buildiumLink ? `data-link="${escapeHtml(buildiumLink)}"` : ""}>
         <div class="entity-icon">${icon}</div>
         <div class="entity-info">
           <div class="entity-type">${label} #${escapeHtml(String(id))}</div>
@@ -259,6 +538,14 @@ function renderEntities(entities) {
       </div>
     `;
   }).join("");
+
+  // Deep link click handler
+  list.querySelectorAll(".entity-clickable").forEach((card) => {
+    card.addEventListener("click", () => {
+      const link = card.dataset.link;
+      if (link) chrome.tabs.create({ url: link });
+    });
+  });
 }
 
 function renderTaskList(containerId, tasks) {
@@ -284,12 +571,12 @@ function renderTaskList(containerId, tasks) {
     </div>
   `).join("");
 
-  // Wire up status change handlers
   list.querySelectorAll(".task-status-select").forEach((select) => {
     select.addEventListener("change", async (e) => {
       const taskId = e.target.dataset.taskId;
       const newStatus = e.target.value;
       await apiCall("task-engine?action=update", { taskId, status: newStatus });
+      chrome.runtime.sendMessage({ type: "HELIXIS_REFRESH_BADGE" });
     });
   });
 }
@@ -311,7 +598,7 @@ function renderActivity(events) {
   }).join("");
 }
 
-// ─── Tasks Tab ───────────────────────────────────────────────────────
+// ─── Tasks Tab ──────────────────────────────────────────────────────
 
 async function loadAllTasks() {
   if (!isConfigured()) return;
@@ -335,7 +622,34 @@ async function loadAllTasks() {
 
 document.getElementById("refreshTasksBtn").addEventListener("click", loadAllTasks);
 
-// ─── Chat ────────────────────────────────────────────────────────────
+// ─── Chat: History Loading (#3) ─────────────────────────────────────
+
+async function loadChatHistory() {
+  if (!isConfigured() || chatHistoryLoaded) return;
+  chatHistoryLoaded = true;
+
+  const result = await apiCall("chat-history", {
+    workspaceId: CONFIG.workspaceId,
+    limit: 30,
+  });
+
+  if (result?.messages?.length > 0) {
+    const welcome = chatMessages.querySelector(".chat-welcome");
+    if (welcome) welcome.remove();
+
+    for (const msg of result.messages) {
+      if (msg.role === "assistant" && msg.metadata) {
+        appendChatBubble("assistant", msg.content, false, msg.metadata);
+      } else {
+        appendChatBubble(msg.role, msg.content);
+      }
+      chatHistory.push({ role: msg.role, content: msg.content });
+    }
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  }
+}
+
+// ─── Chat: Send Message ─────────────────────────────────────────────
 
 const chatInput = document.getElementById("chatInput");
 const chatSend = document.getElementById("chatSend");
@@ -380,6 +694,11 @@ async function sendChatMessage() {
     chatHistory.push({ role: "user", content: message });
     chatHistory.push({ role: "assistant", content: result.reply });
     if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+
+    // Task creation from chat (#5)
+    if (result.structured.create_task) {
+      handleTaskCreation(result.structured.create_task);
+    }
   } else if (result?.reply) {
     appendChatBubble("assistant", result.reply);
     chatHistory.push({ role: "user", content: message });
@@ -388,11 +707,35 @@ async function sendChatMessage() {
   } else {
     appendChatBubble("assistant", null, false, {
       summary: "Sorry, I couldn't get a response.",
-      recommended_action: "Check your configuration or try again.",
+      recommended_action: "Check your connection or try again.",
       confidence: "low",
     });
   }
 }
+
+// ─── Chat: Task Creation from AI (#5) ───────────────────────────────
+
+async function handleTaskCreation(taskData) {
+  const result = await apiCall("task-engine?action=create", {
+    workspaceId: CONFIG.workspaceId,
+    title: taskData.title,
+    description: taskData.description || "",
+    taskType: taskData.task_type || "general",
+    priority: taskData.priority || "medium",
+    entityType: taskData.entity_type || currentContext?.entities?.[0]?.type,
+    entityId: taskData.entity_id || currentContext?.entities?.[0]?.id,
+  });
+
+  if (result?.task) {
+    appendChatBubble("assistant", null, false, {
+      summary: `Task created: "${result.task.title}"`,
+      confidence: "high",
+    });
+    chrome.runtime.sendMessage({ type: "HELIXIS_REFRESH_BADGE" });
+  }
+}
+
+// ─── Chat: Rendering ────────────────────────────────────────────────
 
 function appendChatBubble(role, text, isTyping = false, structured = null) {
   const welcome = chatMessages.querySelector(".chat-welcome");
@@ -410,7 +753,6 @@ function appendChatBubble(role, text, isTyping = false, structured = null) {
   chatMessages.appendChild(bubble);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 
-  // Wire follow-up question clicks
   if (structured?.follow_up_questions?.length) {
     bubble.querySelectorAll(".followup-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -426,12 +768,10 @@ function appendChatBubble(role, text, isTyping = false, structured = null) {
 function renderStructuredResponse(s) {
   const parts = [];
 
-  // Summary (always shown)
   if (s.summary) {
     parts.push(`<div class="ai-summary">${escapeHtml(s.summary)}</div>`);
   }
 
-  // Recommended action
   if (s.recommended_action) {
     parts.push(`<div class="ai-action">
       <span class="ai-label">Recommended</span>
@@ -439,7 +779,6 @@ function renderStructuredResponse(s) {
     </div>`);
   }
 
-  // Why it matters
   if (s.why_it_matters) {
     parts.push(`<div class="ai-why">
       <span class="ai-label">Why it matters</span>
@@ -447,7 +786,6 @@ function renderStructuredResponse(s) {
     </div>`);
   }
 
-  // Relevant policies
   if (s.relevant_policies?.length > 0) {
     const pols = s.relevant_policies.map((p) => `<li>${escapeHtml(p)}</li>`).join("");
     parts.push(`<div class="ai-policies">
@@ -456,7 +794,6 @@ function renderStructuredResponse(s) {
     </div>`);
   }
 
-  // Confidence indicator
   if (s.confidence) {
     parts.push(`<div class="ai-confidence confidence-${s.confidence}">
       <span class="confidence-dot"></span>
@@ -464,7 +801,6 @@ function renderStructuredResponse(s) {
     </div>`);
   }
 
-  // Follow-up questions
   if (s.follow_up_questions?.length > 0) {
     const btns = s.follow_up_questions
       .map((q) => `<button class="followup-btn">${escapeHtml(q)}</button>`)
@@ -483,16 +819,26 @@ chatInput.addEventListener("keydown", (e) => {
   }
 });
 
-// ─── Context Listeners ───────────────────────────────────────────────
+// ─── Context Listeners ──────────────────────────────────────────────
 
-// Listen for context updates from service worker
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "HELIXIS_CONTEXT_UPDATE" && msg.context) {
     onContextUpdate(msg.context);
   }
+  // Live task updates from polling (#6)
+  if (msg.type === "HELIXIS_TASKS_UPDATED" && msg.tasks) {
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab?.dataset.tab === "tasks") {
+      const emptyEl = document.getElementById("tasksEmpty");
+      const list = document.getElementById("allTaskList");
+      if (msg.tasks.length > 0) {
+        emptyEl.style.display = "none";
+        renderTaskList("allTaskList", msg.tasks);
+      }
+    }
+  }
 });
 
-// On panel open, request context from active tab
 async function initContext() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -504,10 +850,9 @@ async function initContext() {
           return;
         }
       } catch {
-        // Content script not available, use basic info
+        // Content script not available
       }
 
-      // Fallback: use tab info directly
       updateContextDisplay({
         url: tab.url,
         hostname: tab.url ? new URL(tab.url).hostname : null,
@@ -524,7 +869,7 @@ async function initContext() {
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────
 
 function capitalize(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
@@ -575,9 +920,22 @@ function entityIcon(type) {
   return icons[type] || icons.rental;
 }
 
-// ─── Init ────────────────────────────────────────────────────────────
+// ─── App Init ───────────────────────────────────────────────────────
+
+async function initApp() {
+  if (isLoggedIn()) {
+    showScreen("appScreen");
+    initContext();
+    chrome.runtime.sendMessage({ type: "HELIXIS_REFRESH_BADGE" });
+  } else if (isConfigured()) {
+    showScreen("loginScreen");
+  } else {
+    // Not configured at all — show login with a note
+    showScreen("loginScreen");
+  }
+}
 
 (async () => {
   await loadConfig();
-  initContext();
+  await initApp();
 })();

@@ -62,6 +62,19 @@ const RESPONSE_SCHEMA = {
       type: "string",
       description: "If the user revealed a business fact, preference, or procedure worth remembering for future conversations, extract it here. Empty string if nothing to remember.",
     },
+    create_task: {
+      type: "object",
+      description: "If the user asks to create a task, reminder, or follow-up, populate this. Leave null/empty otherwise.",
+      properties: {
+        title: { type: "string", description: "Short task title" },
+        description: { type: "string", description: "Task details" },
+        task_type: { type: "string", description: "One of: general, follow_up, maintenance, lease_action, payment" },
+        priority: { type: "string", description: "One of: low, medium, high, urgent" },
+        entity_type: { type: "string", description: "Related entity type if known" },
+        entity_id: { type: "string", description: "Related entity ID if known" },
+      },
+      required: ["title"],
+    },
   },
   required: ["summary", "confidence"],
 };
@@ -174,7 +187,8 @@ CRITICAL RULES:
 - Clearly distinguish between facts from the data and your general suggestions.
 - Be concise and actionable. Property managers are busy.
 - Never fabricate tenant names, amounts, dates, or IDs. Only reference what is in the provided data.
-- When uncertain, set confidence to "low" and explain what information would help.`);
+- When uncertain, set confidence to "low" and explain what information would help.
+- If the user asks you to create a task, reminder, or follow-up, populate the create_task field with a clear title and appropriate priority.`);
 
   // Business profile (highest priority context)
   if (businessProfile) {

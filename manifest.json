@@ -1,9 +1,9 @@
 {
   "name": "Helixis Copilot (MVP)",
   "description": "AI-powered side panel copilot for property managers. Context-aware assistant for Buildium and more.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "manifest_version": 3,
-  "permissions": ["sidePanel", "tabs", "activeTab", "scripting", "storage"],
+  "permissions": ["sidePanel", "tabs", "activeTab", "scripting", "storage", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "service_worker.js" },
   "side_panel": { "default_path": "panel.html" },
