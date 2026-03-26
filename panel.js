@@ -923,16 +923,12 @@ function entityIcon(type) {
 // ─── App Init ───────────────────────────────────────────────────────
 
 async function initApp() {
-  if (isLoggedIn()) {
-    showScreen("appScreen");
-    initContext();
+  // Skip auth for now — go straight to the app
+  showScreen("appScreen");
+  initContext();
+  try {
     chrome.runtime.sendMessage({ type: "HELIXIS_REFRESH_BADGE" });
-  } else if (isConfigured()) {
-    showScreen("loginScreen");
-  } else {
-    // Not configured at all — show login with a note
-    showScreen("loginScreen");
-  }
+  } catch {}
 }
 
 (async () => {
