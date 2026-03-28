@@ -376,6 +376,7 @@ function fmtDate(d) { try { return new Date(d).toLocaleString([], { month:'short
 // ── INIT ──────────────────────────────────────────────
 
 async function init() {
+  await loadGeminiKey();
   await loadState();
 
   // Tabs
