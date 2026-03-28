@@ -216,12 +216,15 @@ async function handleSend() {
   document.getElementById('messageList').appendChild(typingEl);
 
   try {
+    console.log('Helixis: buildiumData in state:', state.buildiumData ? `${state.buildiumData.rentals?.length || 0} rentals` : 'null');
+
     const systemPrompt = buildSystemPrompt(
       state.workspace || { name: 'P Property Management', slug: 'p-property-management' },
       state.integrations,
       state.context,
       state.buildiumData
     );
+    console.log('Helixis: system prompt length:', systemPrompt.length);
 
     // Send recent messages (last 20 for context window)
     const recentMessages = state.messages.slice(-20);

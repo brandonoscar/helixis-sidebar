@@ -13,10 +13,9 @@ const GEMINI_KEY = 'AIzaSyCquMthaqE-6mVwBSj3GkKi1sj9MUMcEM4';
 
 // Try models in order until one works
 const GEMINI_MODELS = [
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
   'gemini-1.5-flash-latest',
-  'gemini-1.5-flash-002',
   'gemini-pro',
 ];
 let activeModel = null; // cache the working model
@@ -115,9 +114,14 @@ async function sendToGemini(messages, systemPrompt) {
 
   const body = JSON.stringify({ contents });
 
-  // If we already found a working model, use it
+  // If we already found a working model, try it first
   if (activeModel) {
-    return callGeminiModel(activeModel, body);
+    try {
+      return await callGeminiModel(activeModel, body);
+    } catch (err) {
+      console.warn(`Cached model ${activeModel} failed, trying others:`, err.message);
+      activeModel = null; // reset cache
+    }
   }
 
   // Try each model until one works
