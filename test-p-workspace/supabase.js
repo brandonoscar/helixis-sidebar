@@ -61,15 +61,17 @@ Workspace details:
 
 // Send chat to Gemini
 async function sendToGemini(messages, systemPrompt) {
-  const contents = messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.text }]
-  }));
+  // Prepend system prompt as first user message, then a model ack
+  const contents = [
+    { role: 'user', parts: [{ text: systemPrompt }] },
+    { role: 'model', parts: [{ text: 'Understood. I\'m Helixis Copilot, ready to help with your property management workspace.' }] },
+    ...messages.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.text }]
+    }))
+  ];
 
-  const body = {
-    contents,
-    systemInstruction: { parts: [{ text: systemPrompt }] }
-  };
+  const body = { contents };
 
   const res = await fetch(GEMINI_URL, {
     method: 'POST',
