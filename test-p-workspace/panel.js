@@ -49,6 +49,19 @@ async function loadWorkspace() {
     renderWorkspace();
     document.getElementById('headerWorkspace').textContent = state.workspace.name;
     setStatus('Connected', 'ok');
+
+    // Fetch Buildium property data if integration exists
+    const hasBuildium = state.integrations.some(i => i.provider === 'buildium' && i.status === 'connected');
+    if (hasBuildium) {
+      try {
+        const rentals = await fetchBuildiumData(state.workspace.id, 'rentals');
+        state.buildiumData = { rentals };
+        console.log('Helixis: loaded Buildium rentals', rentals.length || 0);
+      } catch (err) {
+        console.warn('Helixis: could not load Buildium data:', err.message);
+        state.buildiumData = null;
+      }
+    }
   } catch (err) {
     console.error('Failed to load workspace:', err);
     document.getElementById('wsName').textContent = 'Error';
@@ -206,7 +219,8 @@ async function handleSend() {
     const systemPrompt = buildSystemPrompt(
       state.workspace || { name: 'P Property Management', slug: 'p-property-management' },
       state.integrations,
-      state.context
+      state.context,
+      state.buildiumData
     );
 
     // Send recent messages (last 20 for context window)

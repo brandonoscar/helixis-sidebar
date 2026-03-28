@@ -21,6 +21,24 @@ const GEMINI_MODELS = [
 ];
 let activeModel = null; // cache the working model
 
+// Fetch Buildium data via edge function
+async function fetchBuildiumData(workspaceId, endpoint = 'rentals') {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/fetch-buildium-data`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({ workspace_id: workspaceId, endpoint })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Buildium fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 async function fetchWorkspaceData() {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_by_slug`, {
     method: 'POST',
@@ -39,7 +57,7 @@ async function fetchWorkspaceData() {
 }
 
 // Build system prompt with workspace context
-function buildSystemPrompt(workspace, integrations, pageContext) {
+function buildSystemPrompt(workspace, integrations, pageContext, buildiumData) {
   let prompt = `You are Helixis Copilot, an AI assistant for property management companies. You are helping the team at "${workspace.name}".
 
 Workspace details:
@@ -54,6 +72,22 @@ Workspace details:
       prompt += `\n- ${intg.provider} (${intg.status}, ${intg.environment})`;
       if (intg.last_test_result?.message) prompt += ` — ${intg.last_test_result.message}`;
     });
+  }
+
+  if (buildiumData) {
+    prompt += '\n\nBuildium Property Data (LIVE from API):';
+    if (buildiumData.rentals && buildiumData.rentals.length > 0) {
+      prompt += `\nRental Properties (${buildiumData.rentals.length} total):`;
+      buildiumData.rentals.slice(0, 25).forEach(r => {
+        prompt += `\n- ${r.Name || r.name || 'Unnamed'} (ID: ${r.Id || r.id})`;
+        if (r.Address) {
+          const a = r.Address;
+          prompt += ` — ${a.AddressLine1 || ''}${a.City ? ', ' + a.City : ''}${a.State ? ', ' + a.State : ''}`;
+        }
+        if (r.NumberOfUnits) prompt += ` | ${r.NumberOfUnits} units`;
+      });
+      if (buildiumData.rentals.length > 25) prompt += `\n... and ${buildiumData.rentals.length - 25} more`;
+    }
   }
 
   if (pageContext) {
