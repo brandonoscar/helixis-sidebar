@@ -9,8 +9,8 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const WORKSPACE_SLUG = 'p-property-management';
 
-const GEMINI_KEY = 'AIzaSyCdPUWmjdeXSVLK1JhDLJeRlEFdpJslPgM';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_KEY = 'AIzaSyCquMthaqE-6mVwBSj3GkKi1sj9MUMcEM4';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_KEY}`;
 
 async function fetchWorkspaceData() {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_by_slug`, {
