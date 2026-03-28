@@ -104,6 +104,7 @@ async function sendToGemini(messages, systemPrompt) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    console.error('Helixis chat error:', JSON.stringify(err));
     throw new Error(err.error || `Chat failed: ${res.status}`);
   }
 
