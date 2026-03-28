@@ -1,30 +1,32 @@
 /*
  * Helixis Copilot — panel.js
- * Auth, workspace data, tab switching, chat, reminders, actions, context.
+ * Workspace data from Supabase, tab switching, chat, reminders, actions, context.
  */
 
 // ── STATE ─────────────────────────────────────────────
 
 const state = {
   activeTab: 'workspace',
-  messages:  [],        // [{ role, text, ts }]
-  reminders: [],        // [{ id, title, note, due, done }]
-  context:   null,      // { hostname, title, text, url, ts }
-  workspace: null,      // fetched workspace data
-  integrations: [],     // fetched integrations
-  members: []           // fetched workspace members
+  selectedSlug: null,    // persisted workspace slug
+  messages:  [],         // [{ role, text, ts }]
+  reminders: [],         // [{ id, title, note, due, done }]
+  context:   null,       // { hostname, title, text, url, ts }
+  workspace: null,       // fetched workspace object
+  integrations: [],      // fetched integrations
+  members: []            // fetched workspace members
 };
 
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
   const data = await chrome.storage.local.get(
-    ['activeTab', 'messages', 'reminders', 'context']
+    ['activeTab', 'selectedSlug', 'messages', 'reminders', 'context']
   );
-  if (data.activeTab) state.activeTab = data.activeTab;
-  if (data.messages)  state.messages  = data.messages;
-  if (data.reminders) state.reminders = data.reminders;
-  if (data.context)   state.context   = data.context;
+  if (data.activeTab)    state.activeTab    = data.activeTab;
+  if (data.selectedSlug) state.selectedSlug = data.selectedSlug;
+  if (data.messages)     state.messages     = data.messages;
+  if (data.reminders)    state.reminders    = data.reminders;
+  if (data.context)      state.context      = data.context;
 }
 
 function saveKeys(...keys) {
@@ -33,123 +35,91 @@ function saveKeys(...keys) {
   chrome.storage.local.set(patch);
 }
 
-// ── AUTH FLOW ─────────────────────────────────────────
-
-async function checkAuth() {
-  const token = await getValidToken();
-  if (token) {
-    showApp();
-    await loadWorkspaceData(token);
-  } else {
-    showLogin();
-  }
-}
-
-function showLogin() {
-  document.getElementById('loginScreen').hidden = false;
-  document.getElementById('appMain').hidden     = true;
-}
-
-function showApp() {
-  document.getElementById('loginScreen').hidden = true;
-  document.getElementById('appMain').hidden     = false;
-}
-
-async function handleLogin() {
-  const email    = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errEl    = document.getElementById('loginError');
-  const btn      = document.getElementById('loginBtn');
-
-  errEl.textContent = '';
-  if (!email || !password) {
-    errEl.textContent = 'Please enter email and password.';
-    return;
-  }
-
-  btn.disabled    = true;
-  btn.textContent = 'Signing in...';
-
-  try {
-    const session = await supabaseSignIn(email, password);
-    await saveSession(session);
-    showApp();
-    await loadWorkspaceData(session.access_token);
-  } catch (err) {
-    errEl.textContent = err.message || 'Sign-in failed.';
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Sign In';
-  }
-}
-
-async function handleLogout() {
-  await clearSession();
-  state.workspace    = null;
-  state.integrations = [];
-  state.members      = [];
-  showLogin();
-}
-
 // ── WORKSPACE DATA ────────────────────────────────────
 
-async function loadWorkspaceData(token) {
+async function loadWorkspaceList() {
+  const select = document.getElementById('wsSelect');
   try {
-    // Get user's workspace memberships
-    const memberships = await supabaseQuery(token, 'workspace_members', {
-      select: 'workspace_id,role',
-      order: 'invited_at.desc'
-    });
+    const workspaces = await fetchWorkspaces();
+    select.innerHTML = '';
 
-    if (memberships.length === 0) {
-      renderWorkspaceEmpty();
+    if (!workspaces || workspaces.length === 0) {
+      select.innerHTML = '<option value="">No workspaces found</option>';
+      setStatus('No data', 'warn');
       return;
     }
 
-    // Use the most recent workspace
-    const wsId = memberships[0].workspace_id;
-    const userRole = memberships[0].role;
+    workspaces.forEach(ws => {
+      const opt = document.createElement('option');
+      opt.value = ws.slug;
+      opt.textContent = ws.name;
+      select.appendChild(opt);
+    });
 
-    // Fetch workspace, integrations, and members in parallel
-    const [workspaces, integrations, members] = await Promise.all([
-      supabaseQuery(token, 'workspaces', {
-        filters: `id=eq.${wsId}`
-      }),
-      supabaseQuery(token, 'integrations', {
-        filters: `workspace_id=eq.${wsId}`,
-        order: 'created_at.desc'
-      }),
-      supabaseQuery(token, 'workspace_members', {
-        filters: `workspace_id=eq.${wsId}`,
-        order: 'invited_at.asc'
-      })
-    ]);
-
-    state.workspace    = workspaces[0] || null;
-    state.integrations = integrations;
-    state.members      = members;
-
-    if (state.workspace) {
-      state.workspace._userRole = userRole;
+    // Restore last selected or pick the first
+    if (state.selectedSlug && workspaces.some(w => w.slug === state.selectedSlug)) {
+      select.value = state.selectedSlug;
+    } else {
+      state.selectedSlug = workspaces[0].slug;
+      select.value = state.selectedSlug;
+      saveKeys('selectedSlug');
     }
+
+    await loadWorkspaceDetail(state.selectedSlug);
+  } catch (err) {
+    console.error('Failed to load workspaces:', err);
+    select.innerHTML = '<option value="">Error loading workspaces</option>';
+    setStatus('Error', 'error');
+  }
+}
+
+async function loadWorkspaceDetail(slug) {
+  if (!slug) return;
+
+  document.getElementById('wsName').textContent = 'Loading...';
+  document.getElementById('wsMeta').textContent = '';
+
+  try {
+    const data = await fetchWorkspaceBySlug(slug);
+
+    if (!data || !data.workspace) {
+      renderWorkspaceEmpty();
+      setStatus('No data', 'warn');
+      return;
+    }
+
+    state.workspace    = data.workspace;
+    state.integrations = data.integrations || [];
+    state.members      = data.members || [];
 
     renderWorkspace();
     updateHeaderWorkspace();
+    setStatus('Connected', 'ok');
   } catch (err) {
-    console.error('Failed to load workspace data:', err);
+    console.error('Failed to load workspace:', err);
     renderWorkspaceError(err.message);
+    setStatus('Error', 'error');
   }
+}
+
+// ── STATUS PILL ───────────────────────────────────────
+
+function setStatus(text, type) {
+  const pill = document.getElementById('statusPill');
+  const label = document.getElementById('statusText');
+  label.textContent = text;
+
+  pill.className = 'status-pill';
+  if (type === 'ok')    pill.classList.add('status-ok');
+  if (type === 'warn')  pill.classList.add('status-warn');
+  if (type === 'error') pill.classList.add('status-error');
 }
 
 // ── WORKSPACE RENDERING ──────────────────────────────
 
 function updateHeaderWorkspace() {
   const el = document.getElementById('headerWorkspace');
-  if (state.workspace) {
-    el.textContent = state.workspace.name;
-  } else {
-    el.textContent = '';
-  }
+  el.textContent = state.workspace ? state.workspace.name : '';
 }
 
 function renderWorkspace() {
@@ -160,7 +130,6 @@ function renderWorkspace() {
   document.getElementById('wsName').textContent = ws.name;
 
   const meta = [];
-  if (ws._userRole)              meta.push(capitalize(ws._userRole));
   if (ws.onboarding_completed_at) meta.push('Onboarding complete');
   else                            meta.push('Onboarding in progress');
   meta.push(`Created ${fmtDate(ws.created_at)}`);
@@ -177,12 +146,15 @@ function renderWorkspace() {
       card.className = 'ws-integration-card';
 
       const statusClass = getStatusClass(intg.status);
-      const statusLabel = capitalize(intg.status.replace('_', ' '));
+      const statusLabel = capitalize(intg.status.replace(/_/g, ' '));
       const providerLabel = capitalize(intg.provider);
 
-      let details = `<span class="ws-int-env">${intg.environment}</span>`;
+      let details = `<span class="ws-int-env">${esc(intg.environment)}</span>`;
       if (intg.last_test_result?.success) {
         details += `<span class="ws-int-latency">${intg.last_test_result.latency_ms}ms</span>`;
+      }
+      if (intg.last_test_result?.message) {
+        details += `<span class="ws-int-msg">${esc(intg.last_test_result.message)}</span>`;
       }
 
       card.innerHTML = `
@@ -220,7 +192,7 @@ function renderWorkspace() {
 }
 
 function renderWorkspaceEmpty() {
-  document.getElementById('wsName').textContent = 'No workspace';
+  document.getElementById('wsName').textContent = 'No workspace found';
   document.getElementById('wsMeta').textContent = 'Complete onboarding to set up your workspace.';
   document.getElementById('wsIntegrations').innerHTML = '<div class="ws-empty">No integrations.</div>';
   document.getElementById('wsMembers').innerHTML      = '<div class="ws-empty">No team members.</div>';
@@ -308,7 +280,6 @@ function handleSend() {
   input.value = '';
   pushMessage('user', text);
 
-  // Stub assistant response — replace with real API call later
   setTimeout(() => {
     pushMessage(
       'assistant',
@@ -422,7 +393,6 @@ async function captureContext() {
 
   let payload;
 
-  // Try content script message first (fast, reliable when injected)
   try {
     payload = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('timeout')), 1500);
@@ -433,7 +403,6 @@ async function captureContext() {
       });
     });
   } catch {
-    // Fallback: executeScript (works on pages loaded before extension install)
     const [result] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => ({
@@ -557,17 +526,17 @@ function fmtDate(dateStr) {
 async function init() {
   await loadState();
 
-  // Login handlers
-  document.getElementById('loginBtn').addEventListener('click', handleLogin);
-  document.getElementById('loginPassword').addEventListener('keydown', e => {
-    if (e.key === 'Enter') handleLogin();
-  });
-  document.getElementById('logoutBtn').addEventListener('click', handleLogout);
-
   // Tab bar
   document.querySelectorAll('.tab').forEach(tab =>
     tab.addEventListener('click', () => switchTab(tab.dataset.tab))
   );
+
+  // Workspace picker
+  document.getElementById('wsSelect').addEventListener('change', async (e) => {
+    state.selectedSlug = e.target.value;
+    saveKeys('selectedSlug');
+    await loadWorkspaceDetail(state.selectedSlug);
+  });
 
   // Chat
   renderMessages();
@@ -592,11 +561,11 @@ async function init() {
   // Context
   document.getElementById('refreshCtxBtn').addEventListener('click', handleRefreshContext);
 
-  // Check auth and load data or show login
-  await checkAuth();
-
-  // Restore last active tab (after auth check)
+  // Restore last active tab
   switchTab(state.activeTab);
+
+  // Load workspace data from Supabase
+  await loadWorkspaceList();
 }
 
 init();

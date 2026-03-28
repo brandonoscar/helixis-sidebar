@@ -8,239 +8,222 @@
 </head>
 <body>
 
-  <!-- ── LOGIN SCREEN ─────────────────────────────────── -->
-  <div id="loginScreen" class="login-screen">
-    <div class="login-card">
-      <div class="login-logo">
-        <svg viewBox="0 0 22 22" fill="none">
-          <path d="M11 2L20 11L11 20L2 11Z" fill="white" fill-opacity="0.9"/>
+  <!-- ── HEADER ───────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <svg viewBox="0 0 12 12" fill="none">
+          <path d="M6 1L11 6L6 11L1 6Z" fill="white" fill-opacity="0.92"/>
         </svg>
       </div>
-      <div class="login-heading">Helixis Copilot</div>
-      <div class="login-subheading">Sign in with your onboarding account</div>
-      <div class="login-form">
-        <input type="email" id="loginEmail" placeholder="Email" autocomplete="email" />
-        <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" />
-        <div class="login-error" id="loginError"></div>
-        <button class="login-btn" id="loginBtn">Sign In</button>
+      <div class="header-info">
+        <span class="header-title">Helixis Copilot</span>
+        <span class="header-workspace" id="headerWorkspace"></span>
       </div>
     </div>
-  </div>
+    <div class="status-pill" id="statusPill">
+      <span class="status-dot"></span>
+      <span id="statusText">Loading</span>
+    </div>
+  </header>
 
-  <!-- ── MAIN APP (hidden until authenticated) ────────── -->
-  <div id="appMain" class="app-main" hidden>
+  <!-- ── TAB BAR ──────────────────────────────────── -->
+  <nav class="tab-bar">
+    <button class="tab" data-tab="workspace">Workspace</button>
+    <button class="tab" data-tab="chat">Chat</button>
+    <button class="tab" data-tab="reminders">
+      Reminders<span class="badge" id="reminderBadge"></span>
+    </button>
+    <button class="tab" data-tab="actions">Actions</button>
+    <button class="tab" data-tab="context">Context</button>
+  </nav>
 
-    <!-- ── HEADER ───────────────────────────────────── -->
-    <header class="header">
-      <div class="header-brand">
-        <div class="header-logo">
-          <svg viewBox="0 0 12 12" fill="none">
-            <path d="M6 1L11 6L6 11L1 6Z" fill="white" fill-opacity="0.92"/>
+  <!-- ── VIEWS ────────────────────────────────────── -->
+  <div class="views">
+
+    <!-- WORKSPACE ───────────────────────────────────── -->
+    <div class="view" id="view-workspace">
+      <div class="view-inner">
+
+        <!-- Workspace picker -->
+        <div class="ws-picker" id="wsPicker">
+          <label class="ws-picker-label" for="wsSelect">Workspace</label>
+          <select class="ws-select" id="wsSelect">
+            <option value="">Loading workspaces...</option>
+          </select>
+        </div>
+
+        <div class="ws-section-label">Details</div>
+        <div class="ws-card" id="wsCard">
+          <div class="ws-name" id="wsName">Select a workspace</div>
+          <div class="ws-meta" id="wsMeta"></div>
+        </div>
+
+        <div class="ws-section-label">Integration</div>
+        <div id="wsIntegrations" class="ws-integrations">
+          <div class="ws-empty">No integrations found.</div>
+        </div>
+
+        <div class="ws-section-label">Team</div>
+        <div id="wsMembers" class="ws-members">
+          <div class="ws-empty">No team members.</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CHAT ──────────────────────────────────────── -->
+    <div class="view" id="view-chat">
+      <div class="messages" id="messageList">
+        <div class="chat-empty" id="chatEmpty">
+          <div class="chat-empty-logo">
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <path d="M11 2L20 11L11 20L2 11Z" fill="white" fill-opacity="0.9"/>
+            </svg>
+          </div>
+          <div class="chat-empty-title">How can I help?</div>
+          <div class="chat-empty-desc">Ask anything, or capture the page from the Actions tab.</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <input
+          type="text"
+          id="chatInput"
+          placeholder="Message... or / for commands"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="send-btn" id="sendBtn" title="Send">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-        </div>
-        <div class="header-info">
-          <span class="header-title">Helixis Copilot</span>
-          <span class="header-workspace" id="headerWorkspace"></span>
-        </div>
+        </button>
       </div>
-      <button class="logout-btn" id="logoutBtn" title="Sign out">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2M9 10l3-3-3-3M12 7H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-    </header>
+    </div>
 
-    <!-- ── TAB BAR ──────────────────────────────────── -->
-    <nav class="tab-bar">
-      <button class="tab" data-tab="workspace">Workspace</button>
-      <button class="tab" data-tab="chat">Chat</button>
-      <button class="tab" data-tab="reminders">
-        Reminders<span class="badge" id="reminderBadge"></span>
-      </button>
-      <button class="tab" data-tab="actions">Actions</button>
-      <button class="tab" data-tab="context">Context</button>
-    </nav>
-
-    <!-- ── VIEWS ────────────────────────────────────── -->
-    <div class="views">
-
-      <!-- WORKSPACE ───────────────────────────────────── -->
-      <div class="view" id="view-workspace">
-        <div class="view-inner">
-
-          <div class="ws-section-label">Workspace</div>
-          <div class="ws-card" id="wsCard">
-            <div class="ws-name" id="wsName">Loading...</div>
-            <div class="ws-meta" id="wsMeta"></div>
-          </div>
-
-          <div class="ws-section-label">Integration</div>
-          <div id="wsIntegrations" class="ws-integrations">
-            <div class="ws-empty">No integrations found.</div>
-          </div>
-
-          <div class="ws-section-label">Team</div>
-          <div id="wsMembers" class="ws-members">
-            <div class="ws-empty">No team members.</div>
-          </div>
-
-        </div>
+    <!-- REMINDERS ─────────────────────────────────── -->
+    <div class="view" id="view-reminders">
+      <div class="view-header">
+        <span class="view-title">Reminders</span>
+        <button class="icon-btn" id="addReminderBtn" title="Add reminder">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
-
-      <!-- CHAT ──────────────────────────────────────── -->
-      <div class="view" id="view-chat">
-        <div class="messages" id="messageList">
-          <div class="chat-empty" id="chatEmpty">
-            <div class="chat-empty-logo">
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <path d="M11 2L20 11L11 20L2 11Z" fill="white" fill-opacity="0.9"/>
-              </svg>
-            </div>
-            <div class="chat-empty-title">How can I help?</div>
-            <div class="chat-empty-desc">Ask anything, or capture the page from the Actions tab.</div>
+      <div class="view-inner">
+        <div class="reminder-form" id="reminderForm" hidden>
+          <input type="text"           id="reminderTitle" placeholder="Reminder title" />
+          <input type="text"           id="reminderNote"  placeholder="Note (optional)" />
+          <input type="datetime-local" id="reminderDue" />
+          <div class="form-row">
+            <button class="form-btn form-btn-primary"   id="reminderSave">Save</button>
+            <button class="form-btn form-btn-secondary" id="reminderCancel">Cancel</button>
           </div>
         </div>
-        <div class="input-bar">
-          <input
-            type="text"
-            id="chatInput"
-            placeholder="Message... or / for commands"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button class="send-btn" id="sendBtn" title="Send">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <div id="remindersList"></div>
+      </div>
+    </div>
+
+    <!-- ACTIONS ───────────────────────────────────── -->
+    <div class="view" id="view-actions">
+      <div class="view-inner">
+
+        <div class="action-card primary-action" id="actionReadCtx" role="button" tabindex="0">
+          <div class="action-icon accent">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
-          </button>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Read Page Context</div>
+            <div class="action-desc">Extract visible text from the active tab</div>
+          </div>
+          <div class="action-tag active-tag">Active</div>
         </div>
-      </div>
 
-      <!-- REMINDERS ─────────────────────────────────── -->
-      <div class="view" id="view-reminders">
-        <div class="view-header">
-          <span class="view-title">Reminders</span>
-          <button class="icon-btn" id="addReminderBtn" title="Add reminder">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <div class="action-card disabled">
+          <div class="action-icon muted">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-          </button>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Summarize</div>
+            <div class="action-desc">AI summary of the page</div>
+          </div>
+          <div class="action-tag soon-tag">Soon</div>
         </div>
-        <div class="view-inner">
-          <div class="reminder-form" id="reminderForm" hidden>
-            <input type="text"           id="reminderTitle" placeholder="Reminder title" />
-            <input type="text"           id="reminderNote"  placeholder="Note (optional)" />
-            <input type="datetime-local" id="reminderDue" />
-            <div class="form-row">
-              <button class="form-btn form-btn-primary"   id="reminderSave">Save</button>
-              <button class="form-btn form-btn-secondary" id="reminderCancel">Cancel</button>
-            </div>
-          </div>
-          <div id="remindersList"></div>
-        </div>
-      </div>
 
-      <!-- ACTIONS ───────────────────────────────────── -->
-      <div class="view" id="view-actions">
-        <div class="view-inner">
-
-          <div class="action-card primary-action" id="actionReadCtx" role="button" tabindex="0">
-            <div class="action-icon accent">
-              <svg viewBox="0 0 16 16" fill="none">
-                <path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </div>
-            <div class="action-text">
-              <div class="action-title">Read Page Context</div>
-              <div class="action-desc">Extract visible text from the active tab</div>
-            </div>
-            <div class="action-tag active-tag">Active</div>
-          </div>
-
-          <div class="action-card disabled">
-            <div class="action-icon muted">
-              <svg viewBox="0 0 16 16" fill="none">
-                <path d="M3 12.5h10M8 3.5v7M5.5 6L8 3.5 10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-            <div class="action-text">
-              <div class="action-title">Summarize</div>
-              <div class="action-desc">AI summary of the page</div>
-            </div>
-            <div class="action-tag soon-tag">Soon</div>
-          </div>
-
-          <div class="action-card disabled">
-            <div class="action-icon muted">
-              <svg viewBox="0 0 16 16" fill="none">
-                <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </div>
-            <div class="action-text">
-              <div class="action-title">Draft Reply</div>
-              <div class="action-desc">Compose a response for this page</div>
-            </div>
-            <div class="action-tag soon-tag">Soon</div>
-          </div>
-
-          <div class="action-card disabled">
-            <div class="action-icon muted">
-              <svg viewBox="0 0 16 16" fill="none">
-                <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-            <div class="action-text">
-              <div class="action-title">Run Actions</div>
-              <div class="action-desc">Execute page-level automations</div>
-            </div>
-            <div class="action-tag soon-tag">Soon</div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- CONTEXT ───────────────────────────────────── -->
-      <div class="view" id="view-context">
-        <div class="view-inner">
-
-          <div class="context-info-card">
-            <div class="context-row">
-              <span class="context-row-label">Site</span>
-              <span class="context-row-value" id="ctxHostname">—</span>
-            </div>
-            <div class="context-row">
-              <span class="context-row-label">Title</span>
-              <span class="context-row-value" id="ctxTitle">—</span>
-            </div>
-            <div class="context-row">
-              <span class="context-row-label">Captured</span>
-              <span class="context-row-value" id="ctxTimestamp">—</span>
-            </div>
-          </div>
-
-          <textarea
-            class="ctx-textarea"
-            id="ctxText"
-            placeholder="No context captured yet. Use Read Page Context in the Actions tab."
-            readonly
-          ></textarea>
-
-          <button class="refresh-btn" id="refreshCtxBtn">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              <path d="M11 6.5A4.5 4.5 0 1 1 6.5 2a4.5 4.5 0 0 1 3.18 1.32M11 2v3H8"
-                    stroke="currentColor" stroke-width="1.3"
-                    stroke-linecap="round" stroke-linejoin="round"/>
+        <div class="action-card disabled">
+          <div class="action-icon muted">
+            <svg viewBox="0 0 16 16" fill="none">
+              <rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
-            Refresh Context
-          </button>
-
+          </div>
+          <div class="action-text">
+            <div class="action-title">Draft Reply</div>
+            <div class="action-desc">Compose a response for this page</div>
+          </div>
+          <div class="action-tag soon-tag">Soon</div>
         </div>
+
+        <div class="action-card disabled">
+          <div class="action-icon muted">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Run Actions</div>
+            <div class="action-desc">Execute page-level automations</div>
+          </div>
+          <div class="action-tag soon-tag">Soon</div>
+        </div>
+
       </div>
+    </div>
 
-    </div><!-- /.views -->
+    <!-- CONTEXT ───────────────────────────────────── -->
+    <div class="view" id="view-context">
+      <div class="view-inner">
 
-  </div><!-- /#appMain -->
+        <div class="context-info-card">
+          <div class="context-row">
+            <span class="context-row-label">Site</span>
+            <span class="context-row-value" id="ctxHostname">—</span>
+          </div>
+          <div class="context-row">
+            <span class="context-row-label">Title</span>
+            <span class="context-row-value" id="ctxTitle">—</span>
+          </div>
+          <div class="context-row">
+            <span class="context-row-label">Captured</span>
+            <span class="context-row-value" id="ctxTimestamp">—</span>
+          </div>
+        </div>
+
+        <textarea
+          class="ctx-textarea"
+          id="ctxText"
+          placeholder="No context captured yet. Use Read Page Context in the Actions tab."
+          readonly
+        ></textarea>
+
+        <button class="refresh-btn" id="refreshCtxBtn">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M11 6.5A4.5 4.5 0 1 1 6.5 2a4.5 4.5 0 0 1 3.18 1.32M11 2v3H8"
+                  stroke="currentColor" stroke-width="1.3"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Refresh Context
+        </button>
+
+      </div>
+    </div>
+
+  </div><!-- /.views -->
 
   <script src="supabase.js"></script>
   <script src="panel.js"></script>
