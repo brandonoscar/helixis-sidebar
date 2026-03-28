@@ -50,13 +50,16 @@ async function loadWorkspace() {
     document.getElementById('headerWorkspace').textContent = state.workspace.name;
     setStatus('Connected', 'ok');
 
-    // Fetch Buildium property data if integration exists
+    // Fetch all Buildium data if integration exists
     const hasBuildium = state.integrations.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
     if (hasBuildium) {
       try {
-        const result = await fetchBuildiumData(state.workspace.id, 'rentals');
-        state.buildiumData = { rentals: result.data || [] };
-        console.log('Helixis: loaded Buildium rentals', state.buildiumData.rentals.length);
+        state.buildiumData = await fetchAllBuildiumData(state.workspace.id);
+        const loaded = Object.entries(state.buildiumData)
+          .filter(([, v]) => v.count > 0)
+          .map(([k, v]) => `${k}: ${v.count}`)
+          .join(', ');
+        console.log('Helixis: loaded Buildium data —', loaded || 'no records');
       } catch (err) {
         console.warn('Helixis: could not load Buildium data:', err.message);
         state.buildiumData = null;

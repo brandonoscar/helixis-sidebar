@@ -9,8 +9,16 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const WORKSPACE_SLUG = 'p-property-management';
 
-// Fetch Buildium data via edge function
-async function fetchBuildiumData(workspaceId, endpoint = 'rentals') {
+// All Buildium data categories to fetch
+const BUILDIUM_ENDPOINTS = [
+  'rentals', 'rentals/units', 'leases', 'tenants',
+  'associations', 'associations/units',
+  'workorders', 'tasks', 'vendors',
+  'bankaccounts', 'bills', 'outstandingbalances',
+];
+
+// Fetch all Buildium data in one batch call
+async function fetchAllBuildiumData(workspaceId) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/fetch-buildium-data`, {
     method: 'POST',
     headers: {
@@ -18,7 +26,7 @@ async function fetchBuildiumData(workspaceId, endpoint = 'rentals') {
       'apikey': SUPABASE_ANON,
       'Authorization': `Bearer ${SUPABASE_ANON}`
     },
-    body: JSON.stringify({ workspace_id: workspaceId, endpoint })
+    body: JSON.stringify({ workspace_id: workspaceId, endpoints: BUILDIUM_ENDPOINTS })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -44,7 +52,57 @@ async function fetchWorkspaceData() {
   return res.json();
 }
 
-// Build system prompt with workspace context
+// Summarize an array of Buildium records for the system prompt
+function summarizeRecords(records, type) {
+  if (!records || records.length === 0) return '';
+  const lines = [];
+  const limit = 20;
+
+  records.slice(0, limit).forEach(r => {
+    switch (type) {
+      case 'rentals':
+        lines.push(`- ${r.Name || 'Unnamed'} (ID: ${r.Id})${r.Address ? ` — ${r.Address.AddressLine1 || ''}${r.Address.City ? ', ' + r.Address.City : ''}${r.Address.State ? ', ' + r.Address.State : ''}` : ''}${r.NumberOfUnits ? ' | ' + r.NumberOfUnits + ' units' : ''}`);
+        break;
+      case 'rentals/units':
+        lines.push(`- Unit ${r.UnitNumber || r.Id}${r.MarketRent ? ' | Rent: $' + r.MarketRent : ''}${r.Address ? ' at ' + (r.Address.AddressLine1 || '') : ''}`);
+        break;
+      case 'leases':
+        lines.push(`- Lease ${r.Id}: ${r.LeaseType || ''} | ${r.LeaseStatus || r.Status || ''} | Start: ${r.LeaseFromDate || '?'} End: ${r.LeaseToDate || '?'}${r.Rent ? ' | $' + r.Rent + '/mo' : ''}`);
+        break;
+      case 'tenants':
+        lines.push(`- ${r.FirstName || ''} ${r.LastName || ''} (ID: ${r.Id})${r.Email ? ' | ' + r.Email : ''}${r.PhoneNumbers?.length ? ' | ' + r.PhoneNumbers[0].Number : ''}`);
+        break;
+      case 'associations':
+        lines.push(`- ${r.Name || 'Unnamed'} (ID: ${r.Id})${r.Address ? ` — ${r.Address.AddressLine1 || ''}` : ''}`);
+        break;
+      case 'workorders':
+        lines.push(`- WO#${r.Id}: ${r.Title || r.Subject || 'No title'} | Status: ${r.Status || '?'}${r.Priority ? ' | Priority: ' + r.Priority : ''}`);
+        break;
+      case 'tasks':
+        lines.push(`- Task#${r.Id}: ${r.Title || 'No title'} | Status: ${r.TaskStatus || r.Status || '?'}${r.DueDate ? ' | Due: ' + r.DueDate : ''}`);
+        break;
+      case 'vendors':
+        lines.push(`- ${r.CompanyName || r.FirstName + ' ' + r.LastName || 'Unnamed'} (ID: ${r.Id})${r.Category ? ' | ' + r.Category : ''}`);
+        break;
+      case 'bankaccounts':
+        lines.push(`- ${r.Name || 'Account'} (ID: ${r.Id})${r.AccountType ? ' | ' + r.AccountType : ''}${r.CurrentBalance != null ? ' | Balance: $' + r.CurrentBalance : ''}`);
+        break;
+      case 'bills':
+        lines.push(`- Bill#${r.Id}: $${r.Amount || '?'} | ${r.PaidStatus || r.Status || '?'}${r.DueDate ? ' | Due: ' + r.DueDate : ''}${r.Vendor?.Name ? ' | Vendor: ' + r.Vendor.Name : ''}`);
+        break;
+      case 'outstandingbalances':
+        lines.push(`- ${r.Name || r.AssociatedUnitId || 'ID:' + r.Id}: $${r.TotalBalance || r.Balance || '?'} outstanding`);
+        break;
+      default:
+        lines.push(`- ${JSON.stringify(r).slice(0, 120)}`);
+    }
+  });
+
+  if (records.length > limit) lines.push(`... and ${records.length - limit} more`);
+  return lines.join('\n');
+}
+
+// Build system prompt with workspace context + all Buildium data
 function buildSystemPrompt(workspace, integrations, pageContext, buildiumData) {
   let prompt = `You are Helixis Copilot, an AI assistant for property management companies. You are helping the team at "${workspace.name}".
 
@@ -63,19 +121,32 @@ Workspace details:
   }
 
   if (buildiumData) {
-    prompt += '\n\nBuildium Property Data (LIVE from API):';
-    if (buildiumData.rentals && buildiumData.rentals.length > 0) {
-      prompt += `\nRental Properties (${buildiumData.rentals.length} total):`;
-      buildiumData.rentals.slice(0, 25).forEach(r => {
-        prompt += `\n- ${r.Name || r.name || 'Unnamed'} (ID: ${r.Id || r.id})`;
-        if (r.Address) {
-          const a = r.Address;
-          prompt += ` — ${a.AddressLine1 || ''}${a.City ? ', ' + a.City : ''}${a.State ? ', ' + a.State : ''}`;
-        }
-        if (r.NumberOfUnits) prompt += ` | ${r.NumberOfUnits} units`;
-      });
-      if (buildiumData.rentals.length > 25) prompt += `\n... and ${buildiumData.rentals.length - 25} more`;
-    }
+    prompt += '\n\n=== LIVE BUILDIUM DATA (from API) ===';
+
+    const sections = [
+      { key: 'rentals', label: 'Rental Properties' },
+      { key: 'rentals/units', label: 'Rental Units' },
+      { key: 'leases', label: 'Leases' },
+      { key: 'tenants', label: 'Tenants' },
+      { key: 'associations', label: 'Associations' },
+      { key: 'associations/units', label: 'Association Units' },
+      { key: 'workorders', label: 'Work Orders (Maintenance)' },
+      { key: 'tasks', label: 'Tasks' },
+      { key: 'vendors', label: 'Vendors' },
+      { key: 'bankaccounts', label: 'Bank Accounts' },
+      { key: 'bills', label: 'Bills' },
+      { key: 'outstandingbalances', label: 'Outstanding Balances' },
+    ];
+
+    sections.forEach(({ key, label }) => {
+      const section = buildiumData[key];
+      if (!section || section.error) return;
+      const records = section.data || [];
+      if (records.length === 0) return;
+
+      prompt += `\n\n${label} (${section.count} total):`;
+      prompt += '\n' + summarizeRecords(records, key);
+    });
   }
 
   if (pageContext) {
@@ -85,7 +156,7 @@ Workspace details:
 - Page text (truncated): ${pageContext.text?.slice(0, 2000) || '(none)'}`;
   }
 
-  prompt += '\n\nBe concise, helpful, and professional. If asked about properties, tenants, maintenance, or leasing, provide relevant advice. If the user asks something you cannot answer from context, say so honestly.';
+  prompt += '\n\nYou have LIVE access to the data above. Answer questions about properties, tenants, leases, maintenance, accounting, and tasks using this data. Be concise, helpful, and professional.';
 
   return prompt;
 }
