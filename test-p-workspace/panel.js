@@ -1,6 +1,6 @@
 /*
- * Helixis Copilot — panel.js
- * Auth, workspace data, tab switching, chat, reminders, actions, context.
+ * Helixis Copilot (P Workspace Test) — panel.js
+ * Auto-loads P Property Management workspace. No login required.
  */
 
 // ── STATE ─────────────────────────────────────────────
@@ -18,9 +18,7 @@ const state = {
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
-  const data = await chrome.storage.local.get(
-    ['activeTab', 'messages', 'reminders', 'context']
-  );
+  const data = await chrome.storage.local.get(['activeTab', 'messages', 'reminders', 'context']);
   if (data.activeTab) state.activeTab = data.activeTab;
   if (data.messages)  state.messages  = data.messages;
   if (data.reminders) state.reminders = data.reminders;
@@ -33,103 +31,43 @@ function saveKeys(...keys) {
   chrome.storage.local.set(patch);
 }
 
-// ── AUTH FLOW ─────────────────────────────────────────
-
-async function checkAuth() {
-  const token = await getValidToken();
-  if (token) {
-    showApp();
-    await loadWorkspaceData(token);
-  } else {
-    showLogin();
-  }
-}
-
-function showLogin() {
-  document.getElementById('loginScreen').hidden = false;
-  document.getElementById('appMain').hidden     = true;
-}
-
-function showApp() {
-  document.getElementById('loginScreen').hidden = true;
-  document.getElementById('appMain').hidden     = false;
-}
-
-async function handleLogin() {
-  const email    = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errEl    = document.getElementById('loginError');
-  const btn      = document.getElementById('loginBtn');
-
-  errEl.textContent = '';
-  if (!email || !password) {
-    errEl.textContent = 'Please enter email and password.';
-    return;
-  }
-
-  btn.disabled    = true;
-  btn.textContent = 'Signing in...';
-
-  try {
-    const session = await supabaseSignIn(email, password);
-    await saveSession(session);
-    showApp();
-    await loadWorkspaceData(session.access_token);
-  } catch (err) {
-    errEl.textContent = err.message || 'Sign-in failed.';
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Sign In';
-  }
-}
-
-async function handleLogout() {
-  await clearSession();
-  state.workspace    = null;
-  state.integrations = [];
-  state.members      = [];
-  showLogin();
-}
-
 // ── WORKSPACE DATA ────────────────────────────────────
 
-async function loadWorkspaceData(token) {
+async function loadWorkspace() {
   try {
-    const memberships = await supabaseQuery(token, 'workspace_members', {
-      select: 'workspace_id,role',
-      order: 'invited_at.desc'
-    });
+    const data = await fetchWorkspaceData();
+    if (!data || !data.workspace) {
+      renderWorkspaceEmpty();
+      setStatus('No data', 'warn');
+      return;
+    }
 
-    if (memberships.length === 0) { renderWorkspaceEmpty(); return; }
-
-    const wsId = memberships[0].workspace_id;
-    const userRole = memberships[0].role;
-
-    const [workspaces, integrations, members] = await Promise.all([
-      supabaseQuery(token, 'workspaces', { filters: `id=eq.${wsId}` }),
-      supabaseQuery(token, 'integrations', { filters: `workspace_id=eq.${wsId}`, order: 'created_at.desc' }),
-      supabaseQuery(token, 'workspace_members', { filters: `workspace_id=eq.${wsId}`, order: 'invited_at.asc' })
-    ]);
-
-    state.workspace    = workspaces[0] || null;
-    state.integrations = integrations;
-    state.members      = members;
-    if (state.workspace) state.workspace._userRole = userRole;
+    state.workspace    = data.workspace;
+    state.integrations = data.integrations || [];
+    state.members      = data.members || [];
 
     renderWorkspace();
-    updateHeaderWorkspace();
+    document.getElementById('headerWorkspace').textContent = state.workspace.name;
+    setStatus('Connected', 'ok');
   } catch (err) {
-    console.error('Failed to load workspace data:', err);
-    renderWorkspaceError(err.message);
+    console.error('Failed to load workspace:', err);
+    document.getElementById('wsName').textContent = 'Error';
+    document.getElementById('wsMeta').textContent = err.message;
+    setStatus('Error', 'error');
   }
+}
+
+function setStatus(text, type) {
+  const pill = document.getElementById('statusPill');
+  const label = document.getElementById('statusText');
+  label.textContent = text;
+  pill.className = 'status-pill';
+  if (type === 'ok')    pill.classList.add('status-ok');
+  if (type === 'warn')  pill.classList.add('status-warn');
+  if (type === 'error') pill.classList.add('status-error');
 }
 
 // ── WORKSPACE RENDERING ──────────────────────────────
-
-function updateHeaderWorkspace() {
-  const el = document.getElementById('headerWorkspace');
-  el.textContent = state.workspace ? state.workspace.name : '';
-}
 
 function renderWorkspace() {
   const ws = state.workspace;
@@ -137,73 +75,62 @@ function renderWorkspace() {
 
   document.getElementById('wsName').textContent = ws.name;
   const meta = [];
-  if (ws._userRole) meta.push(capitalize(ws._userRole));
   if (ws.onboarding_completed_at) meta.push('Onboarding complete');
   else meta.push('Onboarding in progress');
   meta.push(`Created ${fmtDate(ws.created_at)}`);
   document.getElementById('wsMeta').textContent = meta.join(' · ');
 
-  renderIntegrations();
-  renderMembers();
-}
-
-function renderIntegrations() {
-  const container = document.getElementById('wsIntegrations');
+  // Integrations
+  const intContainer = document.getElementById('wsIntegrations');
   if (state.integrations.length === 0) {
-    container.innerHTML = '<div class="ws-empty">No integrations configured yet.</div>';
-    return;
+    intContainer.innerHTML = '<div class="ws-empty">No integrations configured yet.</div>';
+  } else {
+    intContainer.innerHTML = '';
+    state.integrations.forEach(intg => {
+      const card = document.createElement('div');
+      card.className = 'ws-integration-card';
+      const statusClass = getStatusClass(intg.status);
+      const statusLabel = capitalize(intg.status.replace(/_/g, ' '));
+      let details = `<span class="ws-int-env">${esc(intg.environment)}</span>`;
+      if (intg.last_test_result?.success) details += `<span class="ws-int-latency">${intg.last_test_result.latency_ms}ms</span>`;
+      if (intg.last_test_result?.message) details += `<span class="ws-int-msg">${esc(intg.last_test_result.message)}</span>`;
+      card.innerHTML = `
+        <div class="ws-int-header">
+          <div class="ws-int-provider">${esc(capitalize(intg.provider))}</div>
+          <div class="ws-int-status ${statusClass}">${esc(statusLabel)}</div>
+        </div>
+        <div class="ws-int-details">${details}</div>
+        ${intg.last_tested_at ? `<div class="ws-int-tested">Last tested ${fmtDate(intg.last_tested_at)}</div>` : ''}`;
+      intContainer.appendChild(card);
+    });
   }
-  container.innerHTML = '';
-  state.integrations.forEach(intg => {
-    const card = document.createElement('div');
-    card.className = 'ws-integration-card';
-    const statusClass = getStatusClass(intg.status);
-    const statusLabel = capitalize(intg.status.replace(/_/g, ' '));
-    let details = `<span class="ws-int-env">${esc(intg.environment)}</span>`;
-    if (intg.last_test_result?.success) details += `<span class="ws-int-latency">${intg.last_test_result.latency_ms}ms</span>`;
-    if (intg.last_test_result?.message) details += `<span class="ws-int-msg">${esc(intg.last_test_result.message)}</span>`;
-    card.innerHTML = `
-      <div class="ws-int-header">
-        <div class="ws-int-provider">${esc(capitalize(intg.provider))}</div>
-        <div class="ws-int-status ${statusClass}">${esc(statusLabel)}</div>
-      </div>
-      <div class="ws-int-details">${details}</div>
-      ${intg.last_tested_at ? `<div class="ws-int-tested">Last tested ${fmtDate(intg.last_tested_at)}</div>` : ''}`;
-    container.appendChild(card);
-  });
-}
 
-function renderMembers() {
-  const container = document.getElementById('wsMembers');
+  // Members
+  const memContainer = document.getElementById('wsMembers');
   if (state.members.length === 0) {
-    container.innerHTML = '<div class="ws-empty">No team members.</div>';
-    return;
+    memContainer.innerHTML = '<div class="ws-empty">No team members.</div>';
+  } else {
+    memContainer.innerHTML = '';
+    state.members.forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'ws-member-row';
+      row.innerHTML = `
+        <div class="ws-member-avatar">${m.role === 'owner' ? '&#9733;' : '&#9679;'}</div>
+        <div class="ws-member-info">
+          <div class="ws-member-role">${esc(capitalize(m.role))}</div>
+          <div class="ws-member-id">${esc(m.user_id.slice(0, 8))}...</div>
+        </div>
+        ${m.accepted_at ? '<div class="ws-member-status accepted">Joined</div>' : '<div class="ws-member-status pending">Pending</div>'}`;
+      memContainer.appendChild(row);
+    });
   }
-  container.innerHTML = '';
-  state.members.forEach(m => {
-    const row = document.createElement('div');
-    row.className = 'ws-member-row';
-    row.innerHTML = `
-      <div class="ws-member-avatar">${m.role === 'owner' ? '&#9733;' : '&#9679;'}</div>
-      <div class="ws-member-info">
-        <div class="ws-member-role">${esc(capitalize(m.role))}</div>
-        <div class="ws-member-id">${esc(m.user_id.slice(0, 8))}...</div>
-      </div>
-      ${m.accepted_at ? '<div class="ws-member-status accepted">Joined</div>' : '<div class="ws-member-status pending">Pending</div>'}`;
-    container.appendChild(row);
-  });
 }
 
 function renderWorkspaceEmpty() {
-  document.getElementById('wsName').textContent = 'No workspace';
-  document.getElementById('wsMeta').textContent = 'Complete onboarding to set up your workspace.';
+  document.getElementById('wsName').textContent = 'No workspace found';
+  document.getElementById('wsMeta').textContent = '';
   document.getElementById('wsIntegrations').innerHTML = '<div class="ws-empty">No integrations.</div>';
   document.getElementById('wsMembers').innerHTML      = '<div class="ws-empty">No team members.</div>';
-}
-
-function renderWorkspaceError(msg) {
-  document.getElementById('wsName').textContent = 'Error loading workspace';
-  document.getElementById('wsMeta').textContent = msg;
 }
 
 function getStatusClass(status) {
@@ -292,7 +219,6 @@ function buildReminderEl(r) {
   const dueSoon = r.due && !r.done && (new Date(r.due).getTime() - now) < 86_400_000;
   const card = document.createElement('div');
   card.className = 'reminder-card' + (r.done ? ' done' : '');
-  card.dataset.id = r.id;
   const titleHtml = esc(r.title) + (dueSoon ? '<span class="due-soon-badge">Soon</span>' : '');
   card.innerHTML = `
     <div class="reminder-content">
@@ -317,18 +243,14 @@ function toggleReminder(id) {
   const r = state.reminders.find(x => x.id === id);
   if (r) { r.done = !r.done; saveKeys('reminders'); renderReminders(); }
 }
-
 function deleteReminder(id) {
   state.reminders = state.reminders.filter(x => x.id !== id);
-  saveKeys('reminders');
-  renderReminders();
+  saveKeys('reminders'); renderReminders();
 }
-
 function updateBadge() {
   const count = state.reminders.filter(r => !r.done).length;
   document.getElementById('reminderBadge').textContent = count > 0 ? count : '';
 }
-
 function showForm(visible) {
   const form = document.getElementById('reminderForm');
   form.hidden = !visible;
@@ -339,22 +261,14 @@ function showForm(visible) {
     document.getElementById('reminderTitle').focus();
   }
 }
-
 function saveReminder() {
   const title = document.getElementById('reminderTitle').value.trim();
   if (!title) { document.getElementById('reminderTitle').focus(); return; }
-  state.reminders.unshift({
-    id: Date.now().toString(), title,
-    note: document.getElementById('reminderNote').value.trim(),
-    due:  document.getElementById('reminderDue').value,
-    done: false
-  });
-  saveKeys('reminders');
-  showForm(false);
-  renderReminders();
+  state.reminders.unshift({ id: Date.now().toString(), title, note: document.getElementById('reminderNote').value.trim(), due: document.getElementById('reminderDue').value, done: false });
+  saveKeys('reminders'); showForm(false); renderReminders();
 }
 
-// ── PAGE CONTEXT CAPTURE ──────────────────────────────
+// ── PAGE CONTEXT ──────────────────────────────────────
 
 async function captureContext() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -385,17 +299,11 @@ async function handleReadContext() {
   const card = document.getElementById('actionReadCtx');
   card.style.pointerEvents = 'none'; card.style.opacity = '0.55';
   try {
-    const ctx = await captureContext();
-    state.context = ctx; saveKeys('context');
-    switchTab('chat');
-    pushMessage('assistant', `Captured context from ${ctx.hostname}.`);
-  } catch (err) {
-    switchTab('chat');
-    pushMessage('assistant', `Could not capture page: ${err.message || err}`);
-  } finally { card.style.pointerEvents = ''; card.style.opacity = ''; }
+    const ctx = await captureContext(); state.context = ctx; saveKeys('context');
+    switchTab('chat'); pushMessage('assistant', `Captured context from ${ctx.hostname}.`);
+  } catch (err) { switchTab('chat'); pushMessage('assistant', `Could not capture page: ${err.message || err}`); }
+  finally { card.style.pointerEvents = ''; card.style.opacity = ''; }
 }
-
-// ── CONTEXT TAB ───────────────────────────────────────
 
 function renderContext() {
   const ctx = state.context;
@@ -409,8 +317,7 @@ async function handleRefreshContext() {
   const btn = document.getElementById('refreshCtxBtn');
   btn.disabled = true; btn.textContent = 'Capturing...';
   try {
-    const ctx = await captureContext();
-    state.context = ctx; saveKeys('context'); renderContext();
+    const ctx = await captureContext(); state.context = ctx; saveKeys('context'); renderContext();
     pushMessage('assistant', `Context refreshed from ${ctx.hostname}.`);
   } catch (err) { pushMessage('assistant', `Refresh failed: ${err.message || err}`); }
   finally {
@@ -424,18 +331,13 @@ async function handleRefreshContext() {
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function fmtDue(due) { try { return new Date(due).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch { return due; } }
-function fmtTs(ts)   { try { return new Date(ts).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch { return ts; } }
-function fmtDate(d)  { try { return new Date(d).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch { return d; } }
+function fmtTs(ts) { try { return new Date(ts).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch { return ts; } }
+function fmtDate(d) { try { return new Date(d).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch { return d; } }
 
 // ── INIT ──────────────────────────────────────────────
 
 async function init() {
   await loadState();
-
-  // Login
-  document.getElementById('loginBtn').addEventListener('click', handleLogin);
-  document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
-  document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 
   // Tabs
   document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.tab)));
@@ -459,9 +361,10 @@ async function init() {
   // Context
   document.getElementById('refreshCtxBtn').addEventListener('click', handleRefreshContext);
 
-  // Auth check
-  await checkAuth();
   switchTab(state.activeTab);
+
+  // Load P workspace data automatically
+  await loadWorkspace();
 }
 
 init();

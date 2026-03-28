@@ -1,0 +1,16 @@
+{
+  "name": "Helixis Copilot (P Workspace Test)",
+  "description": "Test sidebar for P Property Management workspace.",
+  "version": "0.2.1",
+  "manifest_version": 3,
+  "permissions": ["sidePanel", "tabs", "activeTab", "scripting", "storage"],
+  "host_permissions": ["<all_urls>", "https://bvmobfhsbvjqnopigfds.supabase.co/*"],
+  "background": { "service_worker": "service_worker.js" },
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Helixis Copilot (P Test)" },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}
