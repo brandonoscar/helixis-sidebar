@@ -9,18 +9,17 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 const WORKSPACE_SLUG = 'p-property-management';
 
-// Loaded from chrome.storage at init, set via options or first-run
+// Loaded from chrome.storage at init — never hardcoded in source
 let GEMINI_KEY = null;
 
 async function loadGeminiKey() {
   const stored = await chrome.storage.local.get('geminiKey');
-  if (stored.geminiKey) {
-    GEMINI_KEY = stored.geminiKey;
-  } else {
-    // Default key — move to chrome.storage.local to avoid leaking in source
-    GEMINI_KEY = 'AIzaSyCbunGNfZeX5LuImkN6rFtTQjw61DjpMaM';
-    chrome.storage.local.set({ geminiKey: GEMINI_KEY });
-  }
+  GEMINI_KEY = stored.geminiKey || null;
+}
+
+function setGeminiKey(key) {
+  GEMINI_KEY = key;
+  chrome.storage.local.set({ geminiKey: key });
 }
 
 // Try models in order until one works

@@ -206,6 +206,14 @@ async function handleSend() {
   const text  = input.value.trim();
   if (!text) return;
   input.value = '';
+
+  // Prompt for Gemini key if not set
+  if (!GEMINI_KEY) {
+    const key = prompt('Enter your Gemini API key (from aistudio.google.com/apikeys):');
+    if (!key || !key.trim()) return;
+    setGeminiKey(key.trim());
+  }
+
   pushMessage('user', text);
 
   // Show typing indicator
