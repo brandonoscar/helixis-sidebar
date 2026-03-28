@@ -188,15 +188,37 @@ function pushMessage(role, text) {
   list.scrollTop = list.scrollHeight;
 }
 
-function handleSend() {
+async function handleSend() {
   const input = document.getElementById('chatInput');
   const text  = input.value.trim();
   if (!text) return;
   input.value = '';
   pushMessage('user', text);
-  setTimeout(() => {
-    pushMessage('assistant', "AI responses are coming soon! For now, try the Actions tab to capture page context.");
-  }, 500);
+
+  // Show typing indicator
+  const typingMsg = { role: 'assistant', text: 'Thinking...' };
+  const typingEl = buildMsgEl(typingMsg);
+  typingEl.classList.add('typing');
+  typingEl.querySelector('.message-bubble').style.opacity = '0.5';
+  document.getElementById('messageList').appendChild(typingEl);
+
+  try {
+    const systemPrompt = buildSystemPrompt(
+      state.workspace || { name: 'P Property Management', slug: 'p-property-management' },
+      state.integrations,
+      state.context
+    );
+
+    // Send recent messages (last 20 for context window)
+    const recentMessages = state.messages.slice(-20);
+    const reply = await sendToGemini(recentMessages, systemPrompt);
+
+    typingEl.remove();
+    pushMessage('assistant', reply);
+  } catch (err) {
+    typingEl.remove();
+    pushMessage('assistant', `Error: ${err.message}`);
+  }
 }
 
 // ── REMINDERS ─────────────────────────────────────────
