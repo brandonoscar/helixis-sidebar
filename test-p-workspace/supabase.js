@@ -10,7 +10,16 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const WORKSPACE_SLUG = 'p-property-management';
 
 const GEMINI_KEY = 'AIzaSyCquMthaqE-6mVwBSj3GkKi1sj9MUMcEM4';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+
+// Try models in order until one works
+const GEMINI_MODELS = [
+  'gemini-2.5-flash-preview-05-20',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash-002',
+  'gemini-pro',
+];
+let activeModel = null; // cache the working model
 
 async function fetchWorkspaceData() {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_by_slug`, {
@@ -59,9 +68,8 @@ Workspace details:
   return prompt;
 }
 
-// Send chat to Gemini
+// Send chat to Gemini with automatic model fallback
 async function sendToGemini(messages, systemPrompt) {
-  // Prepend system prompt as first user message, then a model ack
   const contents = [
     { role: 'user', parts: [{ text: systemPrompt }] },
     { role: 'model', parts: [{ text: 'Understood. I\'m Helixis Copilot, ready to help with your property management workspace.' }] },
@@ -71,19 +79,55 @@ async function sendToGemini(messages, systemPrompt) {
     }))
   ];
 
-  const body = { contents };
+  const body = JSON.stringify({ contents });
 
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Gemini error: ${res.status}`);
+  // If we already found a working model, use it
+  if (activeModel) {
+    return callGeminiModel(activeModel, body);
   }
 
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+  // Try each model until one works
+  for (const model of GEMINI_MODELS) {
+    try {
+      const result = await callGeminiModel(model, body);
+      activeModel = model; // cache it
+      console.log('Helixis: using model', model);
+      return result;
+    } catch (err) {
+      console.warn(`Model ${model} failed:`, err.message);
+      continue;
+    }
+  }
+
+  throw new Error('No available Gemini model found. Check your API key and billing.');
+}
+
+async function callGeminiModel(model, body) {
+  // Try v1beta first (supports more features), fall back to v1
+  for (const version of ['v1beta', 'v1']) {
+    const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${GEMINI_KEY}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+    }
+
+    const err = await res.json().catch(() => ({}));
+    const msg = err.error?.message || '';
+
+    // If model not found, try next version/model
+    if (res.status === 404 || msg.includes('not found') || msg.includes('no longer available')) {
+      continue;
+    }
+
+    // Other errors (auth, quota, etc.) should throw immediately
+    throw new Error(msg || `Gemini error: ${res.status}`);
+  }
+
+  throw new Error(`Model ${model} not available`);
 }
