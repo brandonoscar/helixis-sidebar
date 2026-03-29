@@ -509,21 +509,42 @@ async function openTaskForm() {
   // Load staff IDs from existing tasks/workorders in Buildium data
   const select = document.getElementById('taskAssignTo');
   select.innerHTML = '';
-  const staffIds = new Set();
+  const staffMap = {};
 
+  // Build a name lookup from all available Buildium data
+  const tenants = state.buildiumData?.tenants?.data || [];
+  tenants.forEach(t => {
+    if (t.Id) staffMap[t.Id] = [t.FirstName, t.LastName].filter(Boolean).join(' ');
+  });
+
+  // Extract unique assigned user IDs from tasks and workorders
+  const assignedIds = new Set();
   const tasks = state.buildiumData?.tasks?.data || [];
-  tasks.forEach(t => { if (t.AssignedToUserId) staffIds.add(t.AssignedToUserId); });
+  tasks.forEach(t => {
+    if (t.AssignedToUserId) assignedIds.add(t.AssignedToUserId);
+    // Check for nested user entity with name
+    if (t.RequestedByUserEntity?.Id) {
+      staffMap[t.RequestedByUserEntity.Id] = t.RequestedByUserEntity.FullName
+        || [t.RequestedByUserEntity.FirstName, t.RequestedByUserEntity.LastName].filter(Boolean).join(' ')
+        || `User ${t.RequestedByUserEntity.Id}`;
+    }
+  });
 
   const workorders = state.buildiumData?.workorders?.data || [];
-  workorders.forEach(wo => { if (wo.AssignedToUserId) staffIds.add(wo.AssignedToUserId); });
+  workorders.forEach(wo => {
+    if (wo.AssignedToUserId) assignedIds.add(wo.AssignedToUserId);
+  });
 
-  if (staffIds.size === 0) {
-    select.innerHTML = '<option value="">No staff found</option>';
+  // Also add workspace members from Supabase as potential assignees
+  // (These are Supabase IDs though, not Buildium IDs — only use Buildium IDs)
+
+  if (assignedIds.size === 0) {
+    select.innerHTML = '<option value="">No staff found — create tasks in Buildium first</option>';
   } else {
-    [...staffIds].forEach(id => {
+    [...assignedIds].forEach(id => {
       const opt = document.createElement('option');
       opt.value = id;
-      opt.textContent = `Staff Member (ID: ${id})`;
+      opt.textContent = staffMap[id] || `Staff Member #${id}`;
       select.appendChild(opt);
     });
   }
