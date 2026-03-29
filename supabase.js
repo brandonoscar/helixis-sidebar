@@ -309,7 +309,26 @@ Workspace details:
 - Page text (truncated): ${pageContext.text?.slice(0, 2000) || '(none)'}`;
   }
 
+  const hasBuildium = integrations?.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
+
   prompt += '\n\nYou have LIVE access to the data above. Answer questions about properties, tenants, leases, maintenance, accounting, and tasks using this data. Be concise, helpful, and professional.';
+
+  if (hasBuildium) {
+    prompt += `\n\n=== TASK CREATION ===
+You CAN create tasks in Buildium. When the user asks you to create a task, respond with a JSON block in this exact format:
+
+\`\`\`helixis-create-task
+{"Title": "...", "Description": "...", "Priority": "Normal", "TaskStatus": "New", "DueDate": "YYYY-MM-DD"}
+\`\`\`
+
+Rules:
+- Title is required. Description, Priority, DueDate are optional.
+- Priority must be "Low", "Normal", or "High".
+- TaskStatus must be "New", "InProgress", "Completed", or "Deferred". Default to "New".
+- DueDate format: YYYY-MM-DD. Only include if the user specifies a date.
+- After the JSON block, add a brief confirmation message like "I'll create that task for you."
+- If the user's request is vague, ask for clarification on the title before creating.`;
+  }
 
   return prompt;
 }

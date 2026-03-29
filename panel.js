@@ -523,7 +523,24 @@ async function handleSend() {
 
     const reply = await sendToGemini(recent, systemPrompt, screenshot);
     typingEl.remove();
-    pushMessage('assistant', reply);
+
+    // Check if the AI wants to create a task
+    const taskMatch = reply.match(/```helixis-create-task\s*([\s\S]*?)```/);
+    if (taskMatch) {
+      const cleanReply = reply.replace(/```helixis-create-task[\s\S]*?```/, '').trim();
+      if (cleanReply) pushMessage('assistant', cleanReply);
+      try {
+        const taskPayload = JSON.parse(taskMatch[1].trim());
+        pushMessage('assistant', `Creating task "${taskPayload.Title}"...`);
+        const result = await createBuildiumTask(state.workspace.id, taskPayload);
+        const taskId = result.data?.Id || '';
+        pushMessage('assistant', `Task created in Buildium${taskId ? ` (ID: ${taskId})` : ''}: "${taskPayload.Title}"`);
+      } catch (taskErr) {
+        pushMessage('assistant', `Failed to create task: ${taskErr.message}`);
+      }
+    } else {
+      pushMessage('assistant', reply);
+    }
   } catch (err) {
     typingEl.remove();
     pushMessage('assistant', `Sorry, I couldn't respond: ${err.message}`);
