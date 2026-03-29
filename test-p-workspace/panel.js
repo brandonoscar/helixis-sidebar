@@ -319,6 +319,13 @@ function buildEventEl(evt) {
 
 function formatEventName(name) {
   if (!name) return 'Unknown Event';
+  // Buildium format: "Entity.Operation" e.g. "Rental.Updated", "TaskCategory.Created"
+  if (name.includes('.')) {
+    const [entity, operation] = name.split('.');
+    // Add spaces before capitals: "TaskCategory" -> "Task Category"
+    const readableEntity = entity.replace(/([a-z])([A-Z])/g, '$1 $2');
+    return `${readableEntity} ${operation}`;
+  }
   return name
     .replace(/([A-Z])/g, ' $1')
     .replace(/[._]/g, ' ')
@@ -345,9 +352,16 @@ function extractEventDetails(evt) {
   const p = evt.payload;
   if (!p) return '';
   const parts = [];
+  // Buildium uses entity-specific ID fields (PropertyId, TenantId, etc.)
   if (p.PropertyName || p.RentalName) parts.push(p.PropertyName || p.RentalName);
   if (p.TenantName || (p.FirstName && p.LastName)) parts.push(p.TenantName || `${p.FirstName} ${p.LastName}`);
   if (p.Amount) parts.push(`$${p.Amount}`);
+  // Buildium payloads are minimal — show the entity ID if available
+  const idFields = ['PropertyId', 'RentalId', 'UnitId', 'LeaseId', 'TenantId',
+    'AssociationId', 'WorkOrderId', 'TaskId', 'VendorId', 'TaskCategoryId'];
+  for (const f of idFields) {
+    if (p[f] != null) { parts.push(`${f.replace('Id','')}: #${p[f]}`); break; }
+  }
   if (p.Description) parts.push(p.Description.slice(0, 80));
   if (p.Subject || p.Title) parts.push((p.Subject || p.Title).slice(0, 80));
   return parts.join(' · ');
