@@ -191,7 +191,12 @@ Workspace details:
 }
 
 // Send chat via Supabase edge function (Gemini key is server-side in vault)
-async function sendToGemini(messages, systemPrompt) {
+async function sendToGemini(messages, systemPrompt, screenshot) {
+  const payload = { messages, systemPrompt };
+  if (screenshot) {
+    // screenshot is a data:image/jpeg;base64,... string
+    payload.screenshot = screenshot;
+  }
   const res = await fetch(`${SUPABASE_URL}/functions/v1/chat-gemini`, {
     method: 'POST',
     headers: {
@@ -199,7 +204,7 @@ async function sendToGemini(messages, systemPrompt) {
       'apikey': SUPABASE_ANON,
       'Authorization': `Bearer ${SUPABASE_ANON}`
     },
-    body: JSON.stringify({ messages, systemPrompt })
+    body: JSON.stringify(payload)
   });
 
   if (!res.ok) {

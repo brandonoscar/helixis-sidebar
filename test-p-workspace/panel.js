@@ -12,7 +12,8 @@ const state = {
   context:   null,
   workspace: null,
   integrations: [],
-  members: []
+  members: [],
+  pendingScreenshot: null   // base64 dataURL from captureVisibleTab
 };
 
 // ── STORAGE ───────────────────────────────────────────
@@ -209,7 +210,15 @@ async function handleSend() {
   if (!text) return;
   input.value = '';
 
-  pushMessage('user', text);
+  // Grab pending screenshot before clearing
+  const screenshot = state.pendingScreenshot;
+  clearScreenshot();
+
+  if (screenshot) {
+    pushMessage('user', `📷 [Screenshot attached] ${text}`);
+  } else {
+    pushMessage('user', text);
+  }
 
   // Show typing indicator
   const typingMsg = { role: 'assistant', text: 'Thinking...' };
@@ -231,7 +240,7 @@ async function handleSend() {
 
     // Send recent messages (last 20 for context window)
     const recentMessages = state.messages.slice(-20);
-    const reply = await sendToGemini(recentMessages, systemPrompt);
+    const reply = await sendToGemini(recentMessages, systemPrompt, screenshot);
 
     typingEl.remove();
     pushMessage('assistant', reply);
@@ -361,6 +370,66 @@ function updateBadge() {
   document.getElementById('reminderBadge').textContent = count > 0 ? count : '';
 }
 
+// ── SCREEN CAPTURE ───────────────────────────────────
+
+async function captureScreen() {
+  // First check if the active tab is capturable
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url || '';
+  if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:') || url.startsWith('chrome-search://')) {
+    throw new Error('Cannot capture browser internal pages. Navigate to a website first.');
+  }
+
+  // Try direct capture first (works in most cases)
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 75 });
+    return dataUrl;
+  } catch (directErr) {
+    console.warn('Helixis: direct capture failed, trying service worker:', directErr.message);
+  }
+
+  // Fallback: ask service worker to capture (needed in some Chrome versions for side panel)
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: 'HELIXIS_CAPTURE_TAB' }, (res) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else if (res?.success) {
+        resolve(res.dataUrl);
+      } else {
+        reject(new Error(res?.error || 'Screen capture failed'));
+      }
+    });
+  });
+}
+
+async function handleCaptureScreen() {
+  const btn = document.getElementById('captureScreenBtn');
+  const indicator = document.getElementById('screenshotIndicator');
+  btn.disabled = true;
+  btn.classList.add('capturing');
+  try {
+    const dataUrl = await captureScreen();
+    state.pendingScreenshot = dataUrl;
+    indicator.style.display = '';
+    indicator.title = 'Screenshot attached — will be sent with your next message';
+    // Focus the chat input so user can type their question
+    document.getElementById('chatInput').focus();
+    switchTab('chat');
+  } catch (err) {
+    switchTab('chat');
+    pushMessage('assistant', err.message);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('capturing');
+  }
+}
+
+function clearScreenshot() {
+  state.pendingScreenshot = null;
+  const indicator = document.getElementById('screenshotIndicator');
+  if (indicator) indicator.style.display = 'none';
+}
+
 // ── PAGE CONTEXT ──────────────────────────────────────
 
 async function captureContext() {
@@ -443,6 +512,10 @@ async function init() {
   // Events (from Buildium webhooks)
   renderEvents();
   document.getElementById('refreshEventsBtn').addEventListener('click', loadEvents);
+
+  // Screen capture
+  document.getElementById('captureScreenBtn').addEventListener('click', handleCaptureScreen);
+  document.getElementById('removeScreenshot').addEventListener('click', clearScreenshot);
 
   // Actions
   const readCtxCard = document.getElementById('actionReadCtx');

@@ -181,6 +181,16 @@ body {
 .input-bar input::placeholder { color: var(--text-tertiary); }
 .input-bar input:focus { border-color: var(--accent-border); }
 
+.capture-btn { width: 32px; height: 32px; border-radius: 9px; background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all var(--ease); }
+.capture-btn:hover { border-color: var(--accent-border); color: var(--accent); }
+.capture-btn:active { transform: scale(0.91); }
+.capture-btn.capturing { opacity: 0.5; pointer-events: none; }
+
+.screenshot-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 12px; background: var(--accent-soft); border-top: 1px solid var(--accent-border); }
+.screenshot-badge { font-size: 11px; color: var(--accent); font-weight: 500; }
+.screenshot-remove { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 4px; }
+.screenshot-remove:hover { color: var(--danger); }
+
 .send-btn { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity var(--ease), transform var(--ease); }
 .send-btn:hover { opacity: 0.84; }
 .send-btn:active { transform: scale(0.91); }
