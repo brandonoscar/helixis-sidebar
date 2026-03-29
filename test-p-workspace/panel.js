@@ -296,25 +296,61 @@ function buildEventEl(evt) {
   const card = document.createElement('div');
   card.className = 'reminder-card';
 
-  const eventLabel = formatEventName(evt.event_name);
-  const entityInfo = evt.entity_type ? `${evt.entity_type} #${evt.entity_id}` : '';
+  const enriched = evt.payload?._enriched || {};
+  const title = enriched.title || formatEventName(evt.event_name);
+  const operation = getOperationLabel(evt.event_name);
+  const description = getEventDescription(evt, enriched);
   const timeAgo = fmtTimeAgo(evt.event_datetime);
   const icon = getEventIcon(evt.event_name);
-  const details = extractEventDetails(evt);
+  const statusBadge = enriched.status ? `<span class="event-status-badge">${esc(enriched.status)}</span>` : '';
+  const priorityBadge = enriched.priority ? `<span class="event-priority-badge">${esc(enriched.priority)}</span>` : '';
 
   card.innerHTML = `
     <div class="event-icon">${icon}</div>
     <div class="reminder-content">
-      <div class="reminder-title">${esc(eventLabel)}</div>
-      ${entityInfo ? `<div class="reminder-note">${esc(entityInfo)}</div>` : ''}
-      ${details ? `<div class="reminder-note">${esc(details)}</div>` : ''}
-      <div class="reminder-due">${esc(timeAgo)}</div>
+      <div class="event-header">
+        <div class="reminder-title">${esc(title)}</div>
+        <span class="event-operation">${esc(operation)}</span>
+      </div>
+      ${description ? `<div class="event-description">${esc(description)}</div>` : ''}
+      <div class="event-meta">
+        ${statusBadge}${priorityBadge}
+        <span class="reminder-due">${esc(timeAgo)}</span>
+      </div>
     </div>
     <button class="reminder-btn del dismiss-btn" title="Dismiss">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
     </button>`;
   card.querySelector('.dismiss-btn').addEventListener('click', () => handleDismiss(evt.id));
   return card;
+}
+
+function getOperationLabel(name) {
+  if (!name || !name.includes('.')) return '';
+  const op = name.split('.')[1];
+  return op || '';
+}
+
+function getEventDescription(evt, enriched) {
+  const parts = [];
+  if (enriched.description) {
+    parts.push(enriched.description.slice(0, 120));
+  }
+  if (enriched.address) parts.push(enriched.address);
+  if (enriched.category) parts.push(enriched.category);
+  if (enriched.dueDate) parts.push(`Due: ${new Date(enriched.dueDate).toLocaleDateString()}`);
+  if (enriched.email) parts.push(enriched.email);
+  if (enriched.rent) parts.push(`Rent: $${enriched.rent}`);
+  // Fallback for non-enriched events
+  if (parts.length === 0) {
+    const p = evt.payload || {};
+    if (p.Subject || p.Title) parts.push((p.Subject || p.Title).slice(0, 120));
+    if (p.Description) parts.push(p.Description.slice(0, 120));
+    if (parts.length === 0 && evt.entity_type && evt.entity_id) {
+      parts.push(`${evt.entity_type} #${evt.entity_id}`);
+    }
+  }
+  return parts.join(' · ');
 }
 
 function formatEventName(name) {
