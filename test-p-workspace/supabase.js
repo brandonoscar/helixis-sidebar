@@ -52,6 +52,21 @@ async function fetchWorkspaceData() {
   return res.json();
 }
 
+// Fetch Buildium webhook events for this workspace
+async function fetchWebhookEvents(limit = 50) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_events`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({ workspace_slug: WORKSPACE_SLUG, event_limit: limit })
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 // Summarize an array of Buildium records for the system prompt
 function summarizeRecords(records, type) {
   if (!records || records.length === 0) return '';

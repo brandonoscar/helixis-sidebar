@@ -8,7 +8,7 @@
 const state = {
   activeTab: 'workspace',
   messages:  [],
-  reminders: [],
+  events:    [],
   context:   null,
   workspace: null,
   integrations: [],
@@ -18,10 +18,9 @@ const state = {
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
-  const data = await chrome.storage.local.get(['activeTab', 'messages', 'reminders', 'context']);
+  const data = await chrome.storage.local.get(['activeTab', 'messages', 'context']);
   if (data.activeTab) state.activeTab = data.activeTab;
   if (data.messages)  state.messages  = data.messages;
-  if (data.reminders) state.reminders = data.reminders;
   if (data.context)   state.context   = data.context;
 }
 
@@ -242,73 +241,112 @@ async function handleSend() {
   }
 }
 
-// ── REMINDERS ─────────────────────────────────────────
+// ── EVENTS (from Buildium webhooks) ──────────────────
 
-function renderReminders() {
+let eventPollTimer = null;
+
+async function loadEvents() {
+  try {
+    const events = await fetchWebhookEvents(50);
+    state.events = Array.isArray(events) ? events : [];
+    renderEvents();
+    console.log('Helixis: loaded', state.events.length, 'webhook events');
+  } catch (err) {
+    console.warn('Helixis: failed to load events:', err.message);
+  }
+}
+
+function startEventPolling(intervalMs = 30000) {
+  if (eventPollTimer) clearInterval(eventPollTimer);
+  eventPollTimer = setInterval(loadEvents, intervalMs);
+}
+
+function renderEvents() {
   const list = document.getElementById('remindersList');
   list.innerHTML = '';
-  if (state.reminders.length === 0) {
-    list.innerHTML = '<div class="reminders-empty">No reminders yet — press + to add one.</div>';
+  if (!state.events || state.events.length === 0) {
+    list.innerHTML = '<div class="reminders-empty">No Buildium events yet. Events will appear here automatically when activity occurs in Buildium.</div>';
   } else {
     const frag = document.createDocumentFragment();
-    state.reminders.forEach(r => frag.appendChild(buildReminderEl(r)));
+    state.events.forEach(e => frag.appendChild(buildEventEl(e)));
     list.appendChild(frag);
   }
   updateBadge();
 }
 
-function buildReminderEl(r) {
-  const now = Date.now();
-  const dueSoon = r.due && !r.done && (new Date(r.due).getTime() - now) < 86_400_000;
+function buildEventEl(evt) {
   const card = document.createElement('div');
-  card.className = 'reminder-card' + (r.done ? ' done' : '');
-  const titleHtml = esc(r.title) + (dueSoon ? '<span class="due-soon-badge">Soon</span>' : '');
+  card.className = 'reminder-card';
+
+  const eventLabel = formatEventName(evt.event_name);
+  const entityInfo = evt.entity_type ? `${evt.entity_type} #${evt.entity_id}` : '';
+  const timeAgo = fmtTimeAgo(evt.event_datetime);
+  const icon = getEventIcon(evt.event_name);
+  const details = extractEventDetails(evt);
+
   card.innerHTML = `
+    <div class="event-icon">${icon}</div>
     <div class="reminder-content">
-      <div class="reminder-title">${titleHtml}</div>
-      ${r.note ? `<div class="reminder-note">${esc(r.note)}</div>` : ''}
-      ${r.due  ? `<div class="reminder-due">${fmtDue(r.due)}</div>` : ''}
-    </div>
-    <div class="reminder-btns">
-      <button class="reminder-btn check" title="${r.done ? 'Mark undone' : 'Mark done'}">
-        <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="reminder-btn del" title="Delete">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </button>
+      <div class="reminder-title">${esc(eventLabel)}</div>
+      ${entityInfo ? `<div class="reminder-note">${esc(entityInfo)}</div>` : ''}
+      ${details ? `<div class="reminder-note">${esc(details)}</div>` : ''}
+      <div class="reminder-due">${esc(timeAgo)}</div>
     </div>`;
-  card.querySelector('.check').addEventListener('click', () => toggleReminder(r.id));
-  card.querySelector('.del').addEventListener('click',   () => deleteReminder(r.id));
   return card;
 }
 
-function toggleReminder(id) {
-  const r = state.reminders.find(x => x.id === id);
-  if (r) { r.done = !r.done; saveKeys('reminders'); renderReminders(); }
+function formatEventName(name) {
+  if (!name) return 'Unknown Event';
+  return name
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[._]/g, ' ')
+    .replace(/^\s+/, '')
+    .trim();
 }
-function deleteReminder(id) {
-  state.reminders = state.reminders.filter(x => x.id !== id);
-  saveKeys('reminders'); renderReminders();
+
+function getEventIcon(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('lease'))       return '📋';
+  if (n.includes('maintenance') || n.includes('workorder')) return '🔧';
+  if (n.includes('payment'))     return '💰';
+  if (n.includes('tenant'))      return '👤';
+  if (n.includes('rental') || n.includes('property')) return '🏠';
+  if (n.includes('association')) return '🏢';
+  if (n.includes('vendor'))      return '🛠️';
+  if (n.includes('task'))        return '✅';
+  if (n.includes('bill'))        return '🧾';
+  if (n.includes('applicant'))   return '📝';
+  return '🔔';
 }
+
+function extractEventDetails(evt) {
+  const p = evt.payload;
+  if (!p) return '';
+  const parts = [];
+  if (p.PropertyName || p.RentalName) parts.push(p.PropertyName || p.RentalName);
+  if (p.TenantName || (p.FirstName && p.LastName)) parts.push(p.TenantName || `${p.FirstName} ${p.LastName}`);
+  if (p.Amount) parts.push(`$${p.Amount}`);
+  if (p.Description) parts.push(p.Description.slice(0, 80));
+  if (p.Subject || p.Title) parts.push((p.Subject || p.Title).slice(0, 80));
+  return parts.join(' · ');
+}
+
+function fmtTimeAgo(dt) {
+  if (!dt) return '';
+  const diff = Date.now() - new Date(dt).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return fmtDate(dt);
+}
+
 function updateBadge() {
-  const count = state.reminders.filter(r => !r.done).length;
+  const count = state.events ? state.events.length : 0;
   document.getElementById('reminderBadge').textContent = count > 0 ? count : '';
-}
-function showForm(visible) {
-  const form = document.getElementById('reminderForm');
-  form.hidden = !visible;
-  if (visible) {
-    document.getElementById('reminderTitle').value = '';
-    document.getElementById('reminderNote').value  = '';
-    document.getElementById('reminderDue').value   = '';
-    document.getElementById('reminderTitle').focus();
-  }
-}
-function saveReminder() {
-  const title = document.getElementById('reminderTitle').value.trim();
-  if (!title) { document.getElementById('reminderTitle').focus(); return; }
-  state.reminders.unshift({ id: Date.now().toString(), title, note: document.getElementById('reminderNote').value.trim(), due: document.getElementById('reminderDue').value, done: false });
-  saveKeys('reminders'); showForm(false); renderReminders();
 }
 
 // ── PAGE CONTEXT ──────────────────────────────────────
@@ -390,11 +428,9 @@ async function init() {
   document.getElementById('sendBtn').addEventListener('click', handleSend);
   document.getElementById('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } });
 
-  // Reminders
-  renderReminders();
-  document.getElementById('addReminderBtn').addEventListener('click', () => showForm(true));
-  document.getElementById('reminderSave').addEventListener('click', saveReminder);
-  document.getElementById('reminderCancel').addEventListener('click', () => showForm(false));
+  // Events (from Buildium webhooks)
+  renderEvents();
+  document.getElementById('refreshEventsBtn').addEventListener('click', loadEvents);
 
   // Actions
   const readCtxCard = document.getElementById('actionReadCtx');
@@ -408,6 +444,10 @@ async function init() {
 
   // Load P workspace data automatically
   await loadWorkspace();
+
+  // Load webhook events and poll every 30s
+  await loadEvents();
+  startEventPolling(30000);
 }
 
 init();
