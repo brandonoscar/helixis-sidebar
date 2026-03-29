@@ -164,6 +164,27 @@ async function dismissWebhookEvent(workspaceSlug, eventId) {
   return res.ok;
 }
 
+// ── BUILDIUM ACTIONS ─────────────────────────────
+
+async function createBuildiumTask(workspaceId, taskData) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/buildium-action`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({
+      workspace_id: workspaceId,
+      action: 'create-task',
+      payload: taskData
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || data.detail?.message || `Create task failed: ${res.status}`);
+  return data;
+}
+
 // ── GEMINI CHAT ──────────────────────────────────────
 
 async function sendToGemini(messages, systemPrompt, screenshot) {

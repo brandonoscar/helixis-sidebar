@@ -301,6 +301,47 @@ body {
 .action-tag.active-tag { background: var(--accent-soft); color: #a78bfa; border: 1px solid var(--accent-border); }
 .action-tag.soon-tag { background: var(--surface-elevated); color: var(--text-tertiary); border: 1px solid var(--border); }
 
+/* ── TASK FORM ──────────────────────────────────── */
+
+.task-form-panel { background: var(--surface); border: 1px solid var(--accent-border); border-radius: var(--radius-md); overflow: hidden; animation: slideDown 0.15s ease-out; }
+.task-form-panel[hidden] { display: none; }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+.task-form-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.task-form-heading { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.task-form-close { background: none; border: none; color: var(--text-tertiary); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.task-form-close:hover { color: var(--danger); }
+
+.task-form-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.task-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.02em; margin-bottom: -4px; }
+.task-label .required { color: var(--danger); }
+
+.task-form-body input,
+.task-form-body textarea,
+.task-form-body select {
+  width: 100%; background: var(--surface-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 10px; font-size: 12.5px;
+  color: var(--text-primary); font-family: inherit; outline: none;
+  transition: border-color var(--ease);
+}
+.task-form-body input:focus,
+.task-form-body textarea:focus,
+.task-form-body select:focus { border-color: var(--accent-border); }
+.task-form-body input::placeholder,
+.task-form-body textarea::placeholder { color: var(--text-tertiary); }
+.task-form-body textarea { resize: vertical; min-height: 56px; line-height: 1.5; }
+.task-form-body select { color-scheme: dark; cursor: pointer; }
+.task-form-body input[type="date"] { color-scheme: dark; }
+
+.task-form-row { display: flex; gap: 8px; }
+.task-form-col { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+
+.task-form-error { font-size: 11.5px; color: var(--danger); min-height: 0; line-height: 1.4; }
+.task-form-error:empty { display: none; }
+
+.task-form-success { font-size: 12px; color: var(--success); text-align: center; padding: 16px 12px; }
+
 /* ── CONTEXT ─────────────────────────────────────── */
 
 .context-info-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }

@@ -385,6 +385,67 @@ function updateBadge() {
   document.getElementById('activityBadge').textContent = count > 0 ? count : '';
 }
 
+// ── CREATE TASK ──────────────────────────────────
+
+function openTaskForm() {
+  const panel = document.getElementById('taskFormPanel');
+  panel.hidden = false;
+  document.getElementById('taskTitle').value = '';
+  document.getElementById('taskDescription').value = '';
+  document.getElementById('taskDueDate').value = '';
+  document.getElementById('taskPriority').value = 'Normal';
+  document.getElementById('taskStatus').value = 'New';
+  document.getElementById('taskFormError').textContent = '';
+  document.getElementById('taskFormSubmitBtn').disabled = false;
+  document.getElementById('taskFormSubmitBtn').textContent = 'Create Task';
+  document.getElementById('taskTitle').focus();
+}
+
+function closeTaskForm() {
+  document.getElementById('taskFormPanel').hidden = true;
+}
+
+async function handleCreateTask() {
+  const title = document.getElementById('taskTitle').value.trim();
+  const description = document.getElementById('taskDescription').value.trim();
+  const dueDate = document.getElementById('taskDueDate').value;
+  const priority = document.getElementById('taskPriority').value;
+  const taskStatus = document.getElementById('taskStatus').value;
+  const errEl = document.getElementById('taskFormError');
+  const btn = document.getElementById('taskFormSubmitBtn');
+
+  errEl.textContent = '';
+  if (!title) { errEl.textContent = 'Title is required.'; return; }
+  if (!state.workspace?.id) { errEl.textContent = 'No workspace loaded.'; return; }
+
+  const hasBuildium = state.integrations.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
+  if (!hasBuildium) { errEl.textContent = 'No Buildium integration connected.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+
+  const payload = {
+    Title: title,
+    TaskStatus: taskStatus,
+    Priority: priority,
+  };
+  if (description) payload.Description = description;
+  if (dueDate) payload.DueDate = dueDate;
+
+  try {
+    const result = await createBuildiumTask(state.workspace.id, payload);
+    closeTaskForm();
+    switchTab('chat');
+    const taskId = result.data?.Id || '';
+    pushMessage('assistant', `Task created in Buildium${taskId ? ` (ID: ${taskId})` : ''}: "${title}"`);
+  } catch (err) {
+    errEl.textContent = err.message || 'Failed to create task.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Task';
+  }
+}
+
 // ── CHAT ──────────────────────────────────────────────
 
 function renderMessages() {
@@ -617,7 +678,15 @@ async function init() {
   // Activity
   document.getElementById('refreshEventsBtn').addEventListener('click', loadEvents);
 
-  // Actions
+  // Actions — Create Task
+  const createTaskCard = document.getElementById('actionCreateTask');
+  createTaskCard.addEventListener('click', openTaskForm);
+  createTaskCard.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskForm(); } });
+  document.getElementById('taskFormClose').addEventListener('click', closeTaskForm);
+  document.getElementById('taskFormCancelBtn').addEventListener('click', closeTaskForm);
+  document.getElementById('taskFormSubmitBtn').addEventListener('click', handleCreateTask);
+
+  // Actions — Read Context
   const readCtxCard = document.getElementById('actionReadCtx');
   readCtxCard.addEventListener('click', handleReadContext);
   readCtxCard.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleReadContext(); } });
