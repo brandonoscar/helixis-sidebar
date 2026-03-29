@@ -291,7 +291,11 @@ function buildEventEl(evt) {
       ${entityInfo ? `<div class="reminder-note">${esc(entityInfo)}</div>` : ''}
       ${details ? `<div class="reminder-note">${esc(details)}</div>` : ''}
       <div class="reminder-due">${esc(timeAgo)}</div>
-    </div>`;
+    </div>
+    <button class="reminder-btn del dismiss-btn" title="Dismiss">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>`;
+  card.querySelector('.dismiss-btn').addEventListener('click', () => handleDismiss(evt.id));
   return card;
 }
 
@@ -342,6 +346,14 @@ function fmtTimeAgo(dt) {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
   return fmtDate(dt);
+}
+
+async function handleDismiss(eventId) {
+  const ok = await dismissWebhookEvent(eventId);
+  if (ok) {
+    state.events = state.events.filter(e => e.id !== eventId);
+    renderEvents();
+  }
 }
 
 function updateBadge() {

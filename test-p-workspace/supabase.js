@@ -67,6 +67,20 @@ async function fetchWebhookEvents(limit = 50) {
   return res.json();
 }
 
+// Dismiss a webhook event
+async function dismissWebhookEvent(eventId) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/dismiss_workspace_event`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({ workspace_slug: WORKSPACE_SLUG, p_event_id: eventId })
+  });
+  return res.ok;
+}
+
 // Summarize an array of Buildium records for the system prompt
 function summarizeRecords(records, type) {
   if (!records || records.length === 0) return '';
