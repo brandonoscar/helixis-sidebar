@@ -228,6 +228,15 @@ async function handleSend() {
   document.getElementById('messageList').appendChild(typingEl);
 
   try {
+    // Auto-capture page context silently on every message
+    try {
+      const ctx = await captureContext();
+      state.context = ctx;
+      saveKeys('context');
+    } catch (e) {
+      console.warn('Helixis: auto-context failed (ok):', e.message);
+    }
+
     console.log('Helixis: buildiumData in state:', state.buildiumData ? `${state.buildiumData.rentals?.length || 0} rentals` : 'null');
 
     const systemPrompt = buildSystemPrompt(
