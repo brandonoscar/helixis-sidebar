@@ -261,26 +261,12 @@ async function handleSend() {
     pushMessage('user', text);
   }
 
-  // Check if user wants to create a task — handle directly
+  // Check if user wants to create a task — open the form
   if (isTaskCreationRequest(text)) {
-    const parsed = parseTaskFromMessage(text);
-    if (parsed.Title) {
-      pushMessage('assistant', `Creating task "${parsed.Title}" in Buildium...`);
-      try {
-        const result = await createBuildiumTask(state.workspace.id, parsed);
-        const taskId = result.data?.Id || '';
-        pushMessage('assistant', `Task created successfully${taskId ? ` (ID: ${taskId})` : ''}: "${parsed.Title}"`);
-      } catch (err) {
-        pushMessage('assistant', `Failed to create task: ${err.message}`);
-      }
-      return;
-    } else {
-      // No title found — open the form instead
-      pushMessage('assistant', 'Sure! Opening the task form for you.');
-      switchTab('actions');
-      openTaskForm();
-      return;
-    }
+    pushMessage('assistant', 'Sure! Opening the task form — fill in the details and hit Create.');
+    switchTab('actions');
+    openTaskForm();
+    return;
   }
 
   // Show typing indicator
@@ -508,7 +494,7 @@ function updateBadge() {
 
 // ── CREATE TASK ──────────────────────────────────
 
-function openTaskForm() {
+async function openTaskForm() {
   const panel = document.getElementById('taskFormPanel');
   panel.hidden = false;
   document.getElementById('taskTitle').value = '';
@@ -519,6 +505,30 @@ function openTaskForm() {
   document.getElementById('taskFormError').textContent = '';
   document.getElementById('taskFormSubmitBtn').disabled = false;
   document.getElementById('taskFormSubmitBtn').textContent = 'Create Task';
+
+  // Load staff for the assign-to dropdown
+  const select = document.getElementById('taskAssignTo');
+  select.innerHTML = '<option value="">Loading staff...</option>';
+  select.disabled = true;
+  try {
+    const staff = await fetchBuildiumStaff(state.workspace.id);
+    select.innerHTML = '';
+    if (staff.length === 0) {
+      select.innerHTML = '<option value="">No staff found</option>';
+    } else {
+      staff.forEach(s => {
+        const name = [s.FirstName, s.LastName].filter(Boolean).join(' ') || `User ${s.Id}`;
+        const opt = document.createElement('option');
+        opt.value = s.Id;
+        opt.textContent = name;
+        select.appendChild(opt);
+      });
+    }
+  } catch {
+    select.innerHTML = '<option value="">Failed to load staff</option>';
+  }
+  select.disabled = false;
+
   document.getElementById('taskTitle').focus();
 }
 
@@ -532,11 +542,13 @@ async function handleCreateTask() {
   const dueDate = document.getElementById('taskDueDate').value;
   const priority = document.getElementById('taskPriority').value;
   const taskStatus = document.getElementById('taskStatus').value;
+  const assignTo = document.getElementById('taskAssignTo').value;
   const errEl = document.getElementById('taskFormError');
   const btn = document.getElementById('taskFormSubmitBtn');
 
   errEl.textContent = '';
   if (!title) { errEl.textContent = 'Title is required.'; return; }
+  if (!assignTo) { errEl.textContent = 'Please select a staff member to assign to.'; return; }
   if (!state.workspace?.id) { errEl.textContent = 'No workspace loaded.'; return; }
 
   btn.disabled = true;
@@ -546,6 +558,7 @@ async function handleCreateTask() {
     Title: title,
     TaskStatus: taskStatus,
     Priority: priority,
+    AssignedToUserId: parseInt(assignTo, 10),
   };
   if (description) payload.Description = description;
   if (dueDate) payload.DueDate = dueDate;

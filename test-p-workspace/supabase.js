@@ -101,6 +101,25 @@ async function createBuildiumTask(workspaceId, taskData) {
   return data;
 }
 
+// Fetch staff list for task assignment
+async function fetchBuildiumStaff(workspaceId) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/buildium-action`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({
+      workspace_id: workspaceId,
+      action: 'list-staff'
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) return [];
+  return data.data || [];
+}
+
 // Summarize an array of Buildium records for the system prompt
 function summarizeRecords(records, type) {
   if (!records || records.length === 0) return '';
