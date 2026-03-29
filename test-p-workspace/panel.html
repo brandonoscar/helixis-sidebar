@@ -112,6 +112,18 @@
     <!-- ACTIONS ───────────────────────────────────── -->
     <div class="view" id="view-actions">
       <div class="view-inner">
+        <div class="action-card primary-action" id="actionCreateTask" role="button" tabindex="0">
+          <div class="action-icon accent">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="action-text">
+            <div class="action-title">Create Task</div>
+            <div class="action-desc">Create a new task in Buildium</div>
+          </div>
+          <div class="action-tag active-tag">Active</div>
+        </div>
         <div class="action-card primary-action" id="actionReadCtx" role="button" tabindex="0">
           <div class="action-icon accent">
             <svg viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5h11M2.5 8h7.5M2.5 11.5h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -129,10 +141,49 @@
           <div class="action-text"><div class="action-title">Draft Reply</div><div class="action-desc">Compose a response for this page</div></div>
           <div class="action-tag soon-tag">Soon</div>
         </div>
-        <div class="action-card disabled">
-          <div class="action-icon muted"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div class="action-text"><div class="action-title">Run Actions</div><div class="action-desc">Execute page-level automations</div></div>
-          <div class="action-tag soon-tag">Soon</div>
+
+        <!-- Create Task Form (hidden by default) -->
+        <div class="task-form-panel" id="taskFormPanel" hidden>
+          <div class="task-form-header">
+            <span class="task-form-heading">New Buildium Task</span>
+            <button class="task-form-close" id="taskFormClose" title="Cancel">&times;</button>
+          </div>
+          <div class="task-form-body">
+            <label class="task-label">Title <span class="required">*</span></label>
+            <input type="text" id="taskTitle" placeholder="e.g. Follow up with tenant" autocomplete="off" />
+
+            <label class="task-label">Description</label>
+            <textarea id="taskDescription" placeholder="Optional details..." rows="3"></textarea>
+
+            <div class="task-form-row">
+              <div class="task-form-col">
+                <label class="task-label">Due Date</label>
+                <input type="date" id="taskDueDate" />
+              </div>
+              <div class="task-form-col">
+                <label class="task-label">Priority</label>
+                <select id="taskPriority">
+                  <option value="Low">Low</option>
+                  <option value="Normal" selected>Normal</option>
+                  <option value="High">High</option>
+                </select>
+              </div>
+            </div>
+
+            <label class="task-label">Status</label>
+            <select id="taskStatus">
+              <option value="New" selected>New</option>
+              <option value="InProgress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Deferred">Deferred</option>
+            </select>
+
+            <div class="task-form-error" id="taskFormError"></div>
+            <div class="form-row">
+              <button class="form-btn form-btn-secondary" id="taskFormCancelBtn">Cancel</button>
+              <button class="form-btn form-btn-primary" id="taskFormSubmitBtn">Create Task</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
