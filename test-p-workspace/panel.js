@@ -204,6 +204,47 @@ function pushMessage(role, text) {
   list.scrollTop = list.scrollHeight;
 }
 
+// Detect if user is asking to create a task
+function isTaskCreationRequest(text) {
+  const lower = text.toLowerCase();
+  const patterns = [
+    /create\s+(a\s+)?task/,
+    /make\s+(a\s+)?task/,
+    /add\s+(a\s+)?task/,
+    /new\s+task/,
+    /create\s+(a\s+)?buildium\s+task/,
+    /task\s+in\s+buildium/,
+  ];
+  return patterns.some(p => p.test(lower));
+}
+
+// Parse task details from a natural language message
+function parseTaskFromMessage(text) {
+  const payload = { TaskStatus: 'New', Priority: 'Normal' };
+
+  // Try to extract a quoted title
+  const quoted = text.match(/[""]([^""]+)[""]/);
+  if (quoted) {
+    payload.Title = quoted[1];
+  } else {
+    // Remove the "create a task" prefix and use the rest as the title
+    let title = text
+      .replace(/^(can\s+you\s+|please\s+|help\s+me\s+)?/i, '')
+      .replace(/^(create|make|add)\s+(a\s+)?(new\s+)?(buildium\s+)?task\s*/i, '')
+      .replace(/^(called|titled|named|to|for|about)\s+/i, '')
+      .replace(/\s+in\s+buildium\s*/i, '')
+      .replace(/\s+here\s*/i, '')
+      .trim();
+    if (title) payload.Title = title;
+  }
+
+  // Check for priority
+  if (/\bhigh\s*priority\b/i.test(text)) payload.Priority = 'High';
+  else if (/\blow\s*priority\b/i.test(text)) payload.Priority = 'Low';
+
+  return payload;
+}
+
 async function handleSend() {
   const input = document.getElementById('chatInput');
   const text  = input.value.trim();
@@ -218,6 +259,28 @@ async function handleSend() {
     pushMessage('user', `📷 [Screenshot attached] ${text}`);
   } else {
     pushMessage('user', text);
+  }
+
+  // Check if user wants to create a task — handle directly
+  if (isTaskCreationRequest(text)) {
+    const parsed = parseTaskFromMessage(text);
+    if (parsed.Title) {
+      pushMessage('assistant', `Creating task "${parsed.Title}" in Buildium...`);
+      try {
+        const result = await createBuildiumTask(state.workspace.id, parsed);
+        const taskId = result.data?.Id || '';
+        pushMessage('assistant', `Task created successfully${taskId ? ` (ID: ${taskId})` : ''}: "${parsed.Title}"`);
+      } catch (err) {
+        pushMessage('assistant', `Failed to create task: ${err.message}`);
+      }
+      return;
+    } else {
+      // No title found — open the form instead
+      pushMessage('assistant', 'Sure! Opening the task form for you.');
+      switchTab('actions');
+      openTaskForm();
+      return;
+    }
   }
 
   // Show typing indicator
@@ -237,15 +300,12 @@ async function handleSend() {
       console.warn('Helixis: auto-context failed (ok):', e.message);
     }
 
-    console.log('Helixis: buildiumData in state:', state.buildiumData ? `${state.buildiumData.rentals?.length || 0} rentals` : 'null');
-
     const systemPrompt = buildSystemPrompt(
       state.workspace || { name: 'P Property Management', slug: 'p-property-management' },
       state.integrations,
       state.context,
       state.buildiumData
     );
-    console.log('Helixis: system prompt length:', systemPrompt.length);
 
     // Send recent messages (last 20 for context window)
     const recentMessages = state.messages.slice(-20);

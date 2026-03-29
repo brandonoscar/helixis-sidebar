@@ -481,6 +481,44 @@ function pushMessage(role, text) {
   list.scrollTop = list.scrollHeight;
 }
 
+// Detect if user is asking to create a task
+function isTaskCreationRequest(text) {
+  const lower = text.toLowerCase();
+  const patterns = [
+    /create\s+(a\s+)?task/,
+    /make\s+(a\s+)?task/,
+    /add\s+(a\s+)?task/,
+    /new\s+task/,
+    /create\s+(a\s+)?buildium\s+task/,
+    /task\s+in\s+buildium/,
+  ];
+  return patterns.some(p => p.test(lower));
+}
+
+// Parse task details from a natural language message
+function parseTaskFromMessage(text) {
+  const payload = { TaskStatus: 'New', Priority: 'Normal' };
+
+  const quoted = text.match(/[""]([^""]+)[""]/);
+  if (quoted) {
+    payload.Title = quoted[1];
+  } else {
+    let title = text
+      .replace(/^(can\s+you\s+|please\s+|help\s+me\s+)?/i, '')
+      .replace(/^(create|make|add)\s+(a\s+)?(new\s+)?(buildium\s+)?task\s*/i, '')
+      .replace(/^(called|titled|named|to|for|about)\s+/i, '')
+      .replace(/\s+in\s+buildium\s*/i, '')
+      .replace(/\s+here\s*/i, '')
+      .trim();
+    if (title) payload.Title = title;
+  }
+
+  if (/\bhigh\s*priority\b/i.test(text)) payload.Priority = 'High';
+  else if (/\blow\s*priority\b/i.test(text)) payload.Priority = 'Low';
+
+  return payload;
+}
+
 async function handleSend() {
   const input = document.getElementById('chatInput');
   const text  = input.value.trim();
@@ -491,6 +529,32 @@ async function handleSend() {
   clearScreenshot();
 
   pushMessage('user', text);
+
+  // Check if user wants to create a task — handle directly
+  if (isTaskCreationRequest(text)) {
+    const hasBuildium = state.integrations.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
+    if (!hasBuildium) {
+      pushMessage('assistant', 'No Buildium integration connected. Connect Buildium first to create tasks.');
+      return;
+    }
+    const parsed = parseTaskFromMessage(text);
+    if (parsed.Title) {
+      pushMessage('assistant', `Creating task "${parsed.Title}" in Buildium...`);
+      try {
+        const result = await createBuildiumTask(state.workspace.id, parsed);
+        const taskId = result.data?.Id || '';
+        pushMessage('assistant', `Task created successfully${taskId ? ` (ID: ${taskId})` : ''}: "${parsed.Title}"`);
+      } catch (err) {
+        pushMessage('assistant', `Failed to create task: ${err.message}`);
+      }
+      return;
+    } else {
+      pushMessage('assistant', 'Sure! Opening the task form for you.');
+      switchTab('actions');
+      openTaskForm();
+      return;
+    }
+  }
 
   // Auto-capture page context silently
   try {
