@@ -506,47 +506,43 @@ async function openTaskForm() {
   document.getElementById('taskFormSubmitBtn').disabled = false;
   document.getElementById('taskFormSubmitBtn').textContent = 'Create Task';
 
-  // Load staff IDs from existing tasks/workorders in Buildium data
+  // Load staff members for the assign-to dropdown
   const select = document.getElementById('taskAssignTo');
   select.innerHTML = '';
-  const staffMap = {};
 
-  // Build a name lookup from all available Buildium data
-  const tenants = state.buildiumData?.tenants?.data || [];
-  tenants.forEach(t => {
-    if (t.Id) staffMap[t.Id] = [t.FirstName, t.LastName].filter(Boolean).join(' ');
-  });
+  // Use the users endpoint data if available
+  const users = state.buildiumData?.users?.data || [];
+  const staffUsers = users.filter(u => u.IsStaff || u.UserType === 'Staff' || u.Role);
 
-  // Extract unique assigned user IDs from tasks and workorders
-  const assignedIds = new Set();
-  const tasks = state.buildiumData?.tasks?.data || [];
-  tasks.forEach(t => {
-    if (t.AssignedToUserId) assignedIds.add(t.AssignedToUserId);
-    // Check for nested user entity with name
-    if (t.RequestedByUserEntity?.Id) {
-      staffMap[t.RequestedByUserEntity.Id] = t.RequestedByUserEntity.FullName
-        || [t.RequestedByUserEntity.FirstName, t.RequestedByUserEntity.LastName].filter(Boolean).join(' ')
-        || `User ${t.RequestedByUserEntity.Id}`;
-    }
-  });
+  // If users endpoint returned data, use it
+  const displayUsers = staffUsers.length > 0 ? staffUsers : users;
 
-  const workorders = state.buildiumData?.workorders?.data || [];
-  workorders.forEach(wo => {
-    if (wo.AssignedToUserId) assignedIds.add(wo.AssignedToUserId);
-  });
-
-  // Also add workspace members from Supabase as potential assignees
-  // (These are Supabase IDs though, not Buildium IDs — only use Buildium IDs)
-
-  if (assignedIds.size === 0) {
-    select.innerHTML = '<option value="">No staff found — create tasks in Buildium first</option>';
-  } else {
-    [...assignedIds].forEach(id => {
+  if (displayUsers.length > 0) {
+    displayUsers.forEach(u => {
+      const name = [u.FirstName, u.LastName].filter(Boolean).join(' ') || `User ${u.Id}`;
       const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = staffMap[id] || `Staff Member #${id}`;
+      opt.value = u.Id;
+      opt.textContent = name;
       select.appendChild(opt);
     });
+  } else {
+    // Fallback: extract IDs from existing tasks
+    const assignedIds = new Set();
+    const tasks = state.buildiumData?.tasks?.data || [];
+    tasks.forEach(t => { if (t.AssignedToUserId) assignedIds.add(t.AssignedToUserId); });
+    const workorders = state.buildiumData?.workorders?.data || [];
+    workorders.forEach(wo => { if (wo.AssignedToUserId) assignedIds.add(wo.AssignedToUserId); });
+
+    if (assignedIds.size === 0) {
+      select.innerHTML = '<option value="">No staff found</option>';
+    } else {
+      [...assignedIds].forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `Staff Member #${id}`;
+        select.appendChild(opt);
+      });
+    }
   }
 
   document.getElementById('taskTitle').focus();

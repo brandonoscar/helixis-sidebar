@@ -13,6 +13,7 @@ const BUILDIUM_ENDPOINTS = [
   'associations', 'associations/units',
   'workorders', 'tasks', 'vendors',
   'bankaccounts', 'bills', 'outstandingbalances',
+  'users',
 ];
 
 // ── AUTH ──────────────────────────────────────────────
