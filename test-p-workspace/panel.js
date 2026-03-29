@@ -506,28 +506,27 @@ async function openTaskForm() {
   document.getElementById('taskFormSubmitBtn').disabled = false;
   document.getElementById('taskFormSubmitBtn').textContent = 'Create Task';
 
-  // Load staff for the assign-to dropdown
+  // Load staff IDs from existing tasks/workorders in Buildium data
   const select = document.getElementById('taskAssignTo');
-  select.innerHTML = '<option value="">Loading staff...</option>';
-  select.disabled = true;
-  try {
-    const staff = await fetchBuildiumStaff(state.workspace.id);
-    select.innerHTML = '';
-    if (staff.length === 0) {
-      select.innerHTML = '<option value="">No staff found</option>';
-    } else {
-      staff.forEach(s => {
-        const name = [s.FirstName, s.LastName].filter(Boolean).join(' ') || `User ${s.Id}`;
-        const opt = document.createElement('option');
-        opt.value = s.Id;
-        opt.textContent = name;
-        select.appendChild(opt);
-      });
-    }
-  } catch {
-    select.innerHTML = '<option value="">Failed to load staff</option>';
+  select.innerHTML = '';
+  const staffIds = new Set();
+
+  const tasks = state.buildiumData?.tasks?.data || [];
+  tasks.forEach(t => { if (t.AssignedToUserId) staffIds.add(t.AssignedToUserId); });
+
+  const workorders = state.buildiumData?.workorders?.data || [];
+  workorders.forEach(wo => { if (wo.AssignedToUserId) staffIds.add(wo.AssignedToUserId); });
+
+  if (staffIds.size === 0) {
+    select.innerHTML = '<option value="">No staff found</option>';
+  } else {
+    [...staffIds].forEach(id => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `Staff Member (ID: ${id})`;
+      select.appendChild(opt);
+    });
   }
-  select.disabled = false;
 
   document.getElementById('taskTitle').focus();
 }
