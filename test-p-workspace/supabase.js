@@ -18,9 +18,56 @@ const BUILDIUM_ENDPOINTS = [
   'users',
 ];
 
+// ── RETRY & THROTTLE ────────────────────────────────
+
+const MIN_REQUEST_GAP_MS = 100;
+let _lastRequestTime = 0;
+
+function _classifyError(status) {
+  if (status === 429) return 'rate_limit';
+  if (status === 401 || status === 403) return 'auth';
+  if (status >= 500) return 'server';
+  if (status === 0 || status === undefined) return 'network';
+  return 'client';
+}
+
+async function fetchWithRetry(url, options = {}, { maxRetries = 3, baseDelay = 1000 } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const now = Date.now();
+    const gap = MIN_REQUEST_GAP_MS - (now - _lastRequestTime);
+    if (gap > 0) await new Promise(r => setTimeout(r, gap));
+    _lastRequestTime = Date.now();
+
+    try {
+      const res = await fetch(url, options);
+      if (res.ok) return res;
+      const errorType = _classifyError(res.status);
+      if (errorType === 'auth' || errorType === 'client') return res;
+      if (attempt < maxRetries && (errorType === 'rate_limit' || errorType === 'server')) {
+        const retryAfter = res.headers.get('Retry-After');
+        const delay = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`Helixis: ${res.status} on ${url.split('?')[0]}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`Helixis: network error on ${url.split('?')[0]}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // Fetch all Buildium data in one batch call
 async function fetchAllBuildiumData(workspaceId) {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/fetch-buildium-data`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/functions/v1/fetch-buildium-data`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -28,16 +75,19 @@ async function fetchAllBuildiumData(workspaceId) {
       'Authorization': `Bearer ${SUPABASE_ANON}`
     },
     body: JSON.stringify({ workspace_id: workspaceId, endpoints: BUILDIUM_ENDPOINTS })
-  });
+  }, { maxRetries: 2, baseDelay: 2000 });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    const errorType = _classifyError(res.status);
+    if (errorType === 'auth') throw new Error('Buildium API authentication failed — check integration credentials');
+    if (errorType === 'rate_limit') throw new Error('Buildium API rate limit reached — data will load on next refresh');
     throw new Error(err.error || `Buildium fetch failed: ${res.status}`);
   }
   return res.json();
 }
 
 async function fetchWorkspaceData() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_by_slug`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_by_slug`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -55,7 +105,7 @@ async function fetchWorkspaceData() {
 
 // Fetch Buildium webhook events for this workspace
 async function fetchWebhookEvents(limit = 50) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_events`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_events`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -63,14 +113,14 @@ async function fetchWebhookEvents(limit = 50) {
       'Authorization': `Bearer ${SUPABASE_ANON}`
     },
     body: JSON.stringify({ workspace_slug: WORKSPACE_SLUG, event_limit: limit })
-  });
+  }, { maxRetries: 1 });
   if (!res.ok) return [];
   return res.json();
 }
 
 // Dismiss a webhook event
 async function dismissWebhookEvent(eventId) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/dismiss_workspace_event`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/rpc/dismiss_workspace_event`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -78,13 +128,13 @@ async function dismissWebhookEvent(eventId) {
       'Authorization': `Bearer ${SUPABASE_ANON}`
     },
     body: JSON.stringify({ workspace_slug: WORKSPACE_SLUG, p_event_id: eventId })
-  });
+  }, { maxRetries: 2 });
   return res.ok;
 }
 
 // Create a task in Buildium via edge function
 async function createBuildiumTask(workspaceId, taskData) {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/buildium-action`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/functions/v1/buildium-action`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -96,15 +146,20 @@ async function createBuildiumTask(workspaceId, taskData) {
       action: 'create-task',
       payload: taskData
     })
-  });
+  }, { maxRetries: 1, baseDelay: 2000 });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || data.detail?.message || `Create task failed: ${res.status}`);
+  if (!res.ok) {
+    const errorType = _classifyError(res.status);
+    if (errorType === 'auth') throw new Error('Buildium API credentials invalid — check integration settings');
+    if (errorType === 'rate_limit') throw new Error('Buildium rate limit hit — wait a moment and try again');
+    throw new Error(data.error || data.detail?.message || `Create task failed: ${res.status}`);
+  }
   return data;
 }
 
 // Fetch staff list for task assignment
 async function fetchBuildiumStaff(workspaceId) {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/buildium-action`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/functions/v1/buildium-action`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -115,7 +170,7 @@ async function fetchBuildiumStaff(workspaceId) {
       workspace_id: workspaceId,
       action: 'list-staff'
     })
-  });
+  }, { maxRetries: 1 });
   const data = await res.json();
   if (!res.ok) return [];
   return data.data || [];
@@ -171,6 +226,91 @@ function summarizeRecords(records, type) {
   return lines.join('\n');
 }
 
+// ── ENTITY LINKING ──────────────────────────────────
+
+function buildEntityRelationships(buildiumData) {
+  if (!buildiumData) return '';
+
+  const rentals = buildiumData['rentals']?.data || [];
+  const units = buildiumData['rentals/units']?.data || [];
+  const leases = buildiumData['leases']?.data || [];
+  const tenants = buildiumData['tenants']?.data || [];
+  const workorders = buildiumData['workorders']?.data || [];
+  const tasks = buildiumData['tasks']?.data || [];
+  const users = buildiumData['users']?.data || [];
+
+  if (rentals.length === 0 && tenants.length === 0) return '';
+
+  const lines = [];
+
+  const userNames = {};
+  users.forEach(u => {
+    const name = [u.FirstName, u.LastName].filter(Boolean).join(' ');
+    if (name) userNames[u.Id] = name;
+  });
+
+  const leasesByTenant = {};
+  leases.forEach(l => {
+    const tenantIds = l.TenantIds || l.Tenants?.map(t => t.Id) || [];
+    tenantIds.forEach(tid => {
+      if (!leasesByTenant[tid]) leasesByTenant[tid] = [];
+      leasesByTenant[tid].push(l);
+    });
+  });
+
+  const unitsByProperty = {};
+  units.forEach(u => {
+    const propId = u.PropertyId || u.RentalId;
+    if (propId) {
+      if (!unitsByProperty[propId]) unitsByProperty[propId] = [];
+      unitsByProperty[propId].push(u);
+    }
+  });
+
+  const woByProperty = {};
+  workorders.forEach(wo => {
+    const propId = wo.PropertyId || wo.RentalId;
+    if (propId) {
+      if (!woByProperty[propId]) woByProperty[propId] = [];
+      woByProperty[propId].push(wo);
+    }
+  });
+
+  rentals.slice(0, 10).forEach(r => {
+    const propUnits = unitsByProperty[r.Id] || [];
+    const propWOs = woByProperty[r.Id] || [];
+    const activeWOs = propWOs.filter(wo => wo.Status !== 'Completed' && wo.Status !== 'Closed');
+    const parts = [`Property "${r.Name || r.Id}"`];
+    if (propUnits.length > 0) parts.push(`${propUnits.length} unit(s)`);
+    if (activeWOs.length > 0) parts.push(`${activeWOs.length} open work order(s)`);
+    lines.push(parts.join(' — '));
+  });
+
+  tenants.slice(0, 10).forEach(t => {
+    const tLeases = leasesByTenant[t.Id] || [];
+    const activeLeases = tLeases.filter(l => l.LeaseStatus === 'Active' || l.Status === 'Active');
+    if (activeLeases.length > 0) {
+      const name = [t.FirstName, t.LastName].filter(Boolean).join(' ') || `Tenant ${t.Id}`;
+      lines.push(`${name} — ${activeLeases.length} active lease(s)`);
+    }
+  });
+
+  const tasksByUser = {};
+  tasks.forEach(t => {
+    if (t.AssignedToUserId && (t.TaskStatus === 'New' || t.TaskStatus === 'InProgress')) {
+      if (!tasksByUser[t.AssignedToUserId]) tasksByUser[t.AssignedToUserId] = 0;
+      tasksByUser[t.AssignedToUserId]++;
+    }
+  });
+  Object.entries(tasksByUser).forEach(([uid, count]) => {
+    const name = userNames[uid] || `User #${uid}`;
+    lines.push(`${name} — ${count} open task(s)`);
+  });
+
+  if (lines.length === 0) return '';
+  return '\n\n=== ENTITY RELATIONSHIPS ===\n' + lines.join('\n');
+}
+
 // Build system prompt with workspace context + all Buildium data
 function buildSystemPrompt(workspace, integrations, pageContext, buildiumData) {
   let prompt = `You are Helixis Copilot, an AI assistant for property management companies. You are helping the team at "${workspace.name}".
@@ -218,6 +358,10 @@ Workspace details:
     });
   }
 
+  // Add entity relationship summaries
+  const relationships = buildEntityRelationships(buildiumData);
+  if (relationships) prompt += relationships;
+
   if (pageContext) {
     prompt += `\n\nThe user is currently viewing:
 - Site: ${pageContext.hostname}
@@ -227,7 +371,7 @@ Workspace details:
 
   const hasBuildium = integrations?.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
 
-  prompt += '\n\nYou have LIVE access to the data above. Answer questions about properties, tenants, leases, maintenance, accounting, and tasks using this data. Be concise, helpful, and professional.';
+  prompt += '\n\nYou have LIVE access to the data above. Use the Entity Relationships section to connect tenants to properties, track open work orders per property, and identify task assignments. Answer questions about properties, tenants, leases, maintenance, accounting, and tasks using this data. Be concise, helpful, and professional.';
 
   if (hasBuildium) {
     prompt += `\n\n=== TASK CREATION ===
@@ -253,10 +397,9 @@ Rules:
 async function sendToGemini(messages, systemPrompt, screenshot) {
   const payload = { messages, systemPrompt };
   if (screenshot) {
-    // screenshot is a data:image/jpeg;base64,... string
     payload.screenshot = screenshot;
   }
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/chat-gemini`, {
+  const res = await fetchWithRetry(`${SUPABASE_URL}/functions/v1/chat-gemini`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -264,11 +407,13 @@ async function sendToGemini(messages, systemPrompt, screenshot) {
       'Authorization': `Bearer ${SUPABASE_ANON}`
     },
     body: JSON.stringify(payload)
-  });
+  }, { maxRetries: 2, baseDelay: 1500 });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     console.error('Helixis chat error:', JSON.stringify(err));
+    const errorType = _classifyError(res.status);
+    if (errorType === 'rate_limit') throw new Error('AI is temporarily busy — try again in a few seconds');
     throw new Error(err.error || `Chat failed: ${res.status}`);
   }
 

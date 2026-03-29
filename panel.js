@@ -108,48 +108,82 @@ async function handleLogout() {
 async function loadWorkspaceData(token) {
   setStatus('warn', 'Loading...');
   try {
-    const memberships = await supabaseQuery(token, 'workspace_members', {
-      select: 'workspace_id,role',
-      order: 'invited_at.desc'
-    });
+    let memberships;
+    try {
+      memberships = await supabaseQuery(token, 'workspace_members', {
+        select: 'workspace_id,role',
+        order: 'invited_at.desc'
+      });
+    } catch (err) {
+      // If auth error, try refreshing token once and retry
+      if (err.message.includes('Authentication error')) {
+        const freshToken = await getValidToken();
+        if (!freshToken) { showLogin(); return; }
+        memberships = await supabaseQuery(freshToken, 'workspace_members', {
+          select: 'workspace_id,role',
+          order: 'invited_at.desc'
+        });
+        token = freshToken;
+      } else {
+        throw err;
+      }
+    }
 
     if (memberships.length === 0) { renderWorkspaceEmpty(); setStatus('error', 'No workspace'); return; }
 
     const wsId = memberships[0].workspace_id;
     const userRole = memberships[0].role;
 
-    const [workspaces, integrations, members] = await Promise.all([
+    const results = await Promise.allSettled([
       supabaseQuery(token, 'workspaces', { filters: `id=eq.${wsId}` }),
       supabaseQuery(token, 'integrations', { filters: `workspace_id=eq.${wsId}`, order: 'created_at.desc' }),
       supabaseQuery(token, 'workspace_members', { filters: `workspace_id=eq.${wsId}`, order: 'invited_at.asc' })
     ]);
 
-    state.workspace    = workspaces[0] || null;
-    state.integrations = integrations;
-    state.members      = members;
+    state.workspace    = results[0].status === 'fulfilled' ? (results[0].value[0] || null) : null;
+    state.integrations = results[1].status === 'fulfilled' ? results[1].value : [];
+    state.members      = results[2].status === 'fulfilled' ? results[2].value : [];
     if (state.workspace) state.workspace._userRole = userRole;
+
+    // Log any partial failures
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.warn(`Helixis: workspace query ${i} failed:`, r.reason?.message);
+    });
 
     renderWorkspace();
     updateHeaderWorkspace();
+
+    if (!state.workspace) {
+      setStatus('error', 'No workspace');
+      return;
+    }
+
     setStatus('ok', 'Connected');
 
     // Load Buildium data if integration exists
-    const hasBuildium = integrations.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
-    if (hasBuildium && state.workspace) {
+    const hasBuildium = state.integrations.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
+    if (hasBuildium) {
       try {
         state.buildiumData = await fetchAllBuildiumData(state.workspace.id);
       } catch (e) {
         console.warn('Helixis: Buildium data fetch failed:', e.message);
+        // Show partial status so user knows data is degraded
+        setStatus('warn', 'Partial data');
       }
     }
 
     // Start loading events and polling
-    if (state.workspace?.slug) {
+    if (state.workspace.slug) {
       await loadEvents();
       startEventPolling();
     }
   } catch (err) {
     console.error('Failed to load workspace data:', err);
+    if (err.message.includes('Authentication error') || err.message.includes('Session expired')) {
+      await clearSession();
+      showLogin();
+      return;
+    }
     renderWorkspaceError(err.message);
     setStatus('error', 'Error');
   }
@@ -634,7 +668,13 @@ async function handleSend() {
     }
   } catch (err) {
     typingEl.remove();
-    pushMessage('assistant', `Sorry, I couldn't respond: ${err.message}`);
+    if (err.message.includes('Authentication error') || err.message.includes('Session expired')) {
+      pushMessage('assistant', 'Your session has expired. Please sign in again.');
+      await clearSession();
+      showLogin();
+    } else {
+      pushMessage('assistant', `Sorry, I couldn't respond: ${err.message}`);
+    }
   }
 }
 
