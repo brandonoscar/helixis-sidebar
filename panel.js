@@ -1,6 +1,8 @@
 /*
  * Helixis Copilot — panel.js
- * Auth, workspace data, tab switching, chat, reminders, actions, context.
+ * Auth, workspace data, chat (Gemini), activity (webhook events),
+ * screen capture, auto-context, actions, context.
+ * All workspace references are dynamic — no hardcoded company data.
  */
 
 // ── STATE ─────────────────────────────────────────────
@@ -8,22 +10,21 @@
 const state = {
   activeTab: 'workspace',
   messages:  [],
-  reminders: [],
+  events:    [],
   context:   null,
   workspace: null,
   integrations: [],
-  members: []
+  members: [],
+  buildiumData: null,
+  pendingScreenshot: null,
 };
 
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
-  const data = await chrome.storage.local.get(
-    ['activeTab', 'messages', 'reminders', 'context']
-  );
+  const data = await chrome.storage.local.get(['activeTab', 'messages', 'context']);
   if (data.activeTab) state.activeTab = data.activeTab;
   if (data.messages)  state.messages  = data.messages;
-  if (data.reminders) state.reminders = data.reminders;
   if (data.context)   state.context   = data.context;
 }
 
@@ -31,6 +32,14 @@ function saveKeys(...keys) {
   const patch = {};
   keys.forEach(k => { patch[k] = state[k]; });
   chrome.storage.local.set(patch);
+}
+
+// ── STATUS INDICATOR ─────────────────────────────────
+
+function setStatus(level, label) {
+  const pill = document.getElementById('statusPill');
+  pill.className = 'status-pill status-' + level;
+  document.getElementById('statusLabel').textContent = label;
 }
 
 // ── AUTH FLOW ─────────────────────────────────────────
@@ -88,19 +97,23 @@ async function handleLogout() {
   state.workspace    = null;
   state.integrations = [];
   state.members      = [];
+  state.buildiumData = null;
+  state.events       = [];
+  if (eventPollTimer) clearInterval(eventPollTimer);
   showLogin();
 }
 
 // ── WORKSPACE DATA ────────────────────────────────────
 
 async function loadWorkspaceData(token) {
+  setStatus('warn', 'Loading...');
   try {
     const memberships = await supabaseQuery(token, 'workspace_members', {
       select: 'workspace_id,role',
       order: 'invited_at.desc'
     });
 
-    if (memberships.length === 0) { renderWorkspaceEmpty(); return; }
+    if (memberships.length === 0) { renderWorkspaceEmpty(); setStatus('error', 'No workspace'); return; }
 
     const wsId = memberships[0].workspace_id;
     const userRole = memberships[0].role;
@@ -118,17 +131,34 @@ async function loadWorkspaceData(token) {
 
     renderWorkspace();
     updateHeaderWorkspace();
+    setStatus('ok', 'Connected');
+
+    // Load Buildium data if integration exists
+    const hasBuildium = integrations.some(i => i.provider === 'buildium' && (i.status === 'connected' || i.status === 'locked'));
+    if (hasBuildium && state.workspace) {
+      try {
+        state.buildiumData = await fetchAllBuildiumData(state.workspace.id);
+      } catch (e) {
+        console.warn('Helixis: Buildium data fetch failed:', e.message);
+      }
+    }
+
+    // Start loading events and polling
+    if (state.workspace?.slug) {
+      await loadEvents();
+      startEventPolling();
+    }
   } catch (err) {
     console.error('Failed to load workspace data:', err);
     renderWorkspaceError(err.message);
+    setStatus('error', 'Error');
   }
 }
 
 // ── WORKSPACE RENDERING ──────────────────────────────
 
 function updateHeaderWorkspace() {
-  const el = document.getElementById('headerWorkspace');
-  el.textContent = state.workspace ? state.workspace.name : '';
+  document.getElementById('headerWorkspace').textContent = state.workspace ? state.workspace.name : '';
 }
 
 function renderWorkspace() {
@@ -226,6 +256,135 @@ function switchTab(name) {
   if (name === 'context') renderContext();
 }
 
+// ── EVENTS (webhook activity) ─────────────────────────
+
+let eventPollTimer = null;
+
+async function loadEvents() {
+  if (!state.workspace?.slug) return;
+  try {
+    const events = await fetchWebhookEvents(state.workspace.slug, 50);
+    state.events = Array.isArray(events) ? events : [];
+    renderEvents();
+  } catch (err) {
+    console.warn('Helixis: failed to load events:', err.message);
+  }
+}
+
+function startEventPolling(intervalMs = 30000) {
+  if (eventPollTimer) clearInterval(eventPollTimer);
+  eventPollTimer = setInterval(loadEvents, intervalMs);
+}
+
+function renderEvents() {
+  const list = document.getElementById('eventsList');
+  list.innerHTML = '';
+  if (!state.events || state.events.length === 0) {
+    list.innerHTML = '<div class="reminders-empty">No events yet. Events will appear here automatically when activity occurs in your integrations.</div>';
+  } else {
+    const frag = document.createDocumentFragment();
+    state.events.forEach(e => frag.appendChild(buildEventEl(e)));
+    list.appendChild(frag);
+  }
+  updateBadge();
+}
+
+function buildEventEl(evt) {
+  const card = document.createElement('div');
+  card.className = 'reminder-card';
+
+  const enriched = evt.payload?._enriched || {};
+  const title = enriched.title || formatEventName(evt.event_name);
+  const operation = getOperationLabel(evt.event_name);
+  const description = getEventDescription(evt, enriched);
+  const timeAgo = fmtTimeAgo(evt.event_datetime);
+  const icon = getEventIcon(evt.event_name);
+  const statusBadge = enriched.status ? `<span class="event-status-badge">${esc(enriched.status)}</span>` : '';
+  const priorityBadge = enriched.priority ? `<span class="event-priority-badge">${esc(enriched.priority)}</span>` : '';
+
+  card.innerHTML = `
+    <div class="event-icon">${icon}</div>
+    <div class="reminder-content">
+      <div class="event-header">
+        <div class="reminder-title">${esc(title)}</div>
+        <span class="event-operation">${esc(operation)}</span>
+      </div>
+      ${description ? `<div class="event-description">${esc(description)}</div>` : ''}
+      <div class="event-meta">
+        ${statusBadge}${priorityBadge}
+        <span class="reminder-due">${esc(timeAgo)}</span>
+      </div>
+    </div>
+    <button class="reminder-btn del dismiss-btn" title="Dismiss">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>`;
+  card.querySelector('.dismiss-btn').addEventListener('click', () => handleDismiss(evt.id));
+  return card;
+}
+
+function getOperationLabel(name) {
+  if (!name || !name.includes('.')) return '';
+  return name.split('.')[1] || '';
+}
+
+function getEventDescription(evt, enriched) {
+  const parts = [];
+  if (enriched.description) parts.push(enriched.description.slice(0, 120));
+  if (enriched.address) parts.push(enriched.address);
+  if (enriched.category) parts.push(enriched.category);
+  if (enriched.dueDate) parts.push(`Due: ${new Date(enriched.dueDate).toLocaleDateString()}`);
+  if (enriched.email) parts.push(enriched.email);
+  if (enriched.rent) parts.push(`Rent: $${enriched.rent}`);
+  if (parts.length === 0) {
+    const p = evt.payload || {};
+    if (p.Subject || p.Title) parts.push((p.Subject || p.Title).slice(0, 120));
+    if (p.Description) parts.push(p.Description.slice(0, 120));
+    if (parts.length === 0 && evt.entity_type && evt.entity_id) {
+      parts.push(`${evt.entity_type} #${evt.entity_id}`);
+    }
+  }
+  return parts.join(' · ');
+}
+
+function formatEventName(name) {
+  if (!name) return 'Unknown Event';
+  if (name.includes('.')) {
+    const [entity, operation] = name.split('.');
+    const readableEntity = entity.replace(/([a-z])([A-Z])/g, '$1 $2');
+    return `${readableEntity} ${operation}`;
+  }
+  return name.replace(/([A-Z])/g, ' $1').replace(/[._]/g, ' ').replace(/^\s+/, '').trim();
+}
+
+function getEventIcon(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('lease'))       return '📋';
+  if (n.includes('maintenance') || n.includes('workorder')) return '🔧';
+  if (n.includes('payment'))     return '💰';
+  if (n.includes('tenant'))      return '👤';
+  if (n.includes('rental') || n.includes('property')) return '🏠';
+  if (n.includes('association')) return '🏢';
+  if (n.includes('vendor'))      return '🛠️';
+  if (n.includes('task'))        return '✅';
+  if (n.includes('bill'))        return '🧾';
+  if (n.includes('applicant'))   return '📝';
+  return '🔔';
+}
+
+async function handleDismiss(eventId) {
+  if (!state.workspace?.slug) return;
+  const ok = await dismissWebhookEvent(state.workspace.slug, eventId);
+  if (ok) {
+    state.events = state.events.filter(e => e.id !== eventId);
+    renderEvents();
+  }
+}
+
+function updateBadge() {
+  const count = (state.events || []).filter(e => !e.dismissed).length;
+  document.getElementById('activityBadge').textContent = count > 0 ? count : '';
+}
+
 // ── CHAT ──────────────────────────────────────────────
 
 function renderMessages() {
@@ -261,97 +420,88 @@ function pushMessage(role, text) {
   list.scrollTop = list.scrollHeight;
 }
 
-function handleSend() {
+async function handleSend() {
   const input = document.getElementById('chatInput');
   const text  = input.value.trim();
   if (!text) return;
   input.value = '';
+
+  const screenshot = state.pendingScreenshot;
+  clearScreenshot();
+
   pushMessage('user', text);
-  setTimeout(() => {
-    pushMessage('assistant', "AI responses are coming soon! For now, try the Actions tab to capture page context.");
-  }, 500);
-}
 
-// ── REMINDERS ─────────────────────────────────────────
-
-function renderReminders() {
-  const list = document.getElementById('remindersList');
-  list.innerHTML = '';
-  if (state.reminders.length === 0) {
-    list.innerHTML = '<div class="reminders-empty">No reminders yet — press + to add one.</div>';
-  } else {
-    const frag = document.createDocumentFragment();
-    state.reminders.forEach(r => frag.appendChild(buildReminderEl(r)));
-    list.appendChild(frag);
+  // Auto-capture page context silently
+  try {
+    const ctx = await captureContext();
+    state.context = ctx;
+    saveKeys('context');
+  } catch (e) {
+    console.warn('Helixis: auto-context failed (ok):', e.message);
   }
-  updateBadge();
-}
 
-function buildReminderEl(r) {
-  const now = Date.now();
-  const dueSoon = r.due && !r.done && (new Date(r.due).getTime() - now) < 86_400_000;
-  const card = document.createElement('div');
-  card.className = 'reminder-card' + (r.done ? ' done' : '');
-  card.dataset.id = r.id;
-  const titleHtml = esc(r.title) + (dueSoon ? '<span class="due-soon-badge">Soon</span>' : '');
-  card.innerHTML = `
-    <div class="reminder-content">
-      <div class="reminder-title">${titleHtml}</div>
-      ${r.note ? `<div class="reminder-note">${esc(r.note)}</div>` : ''}
-      ${r.due  ? `<div class="reminder-due">${fmtDue(r.due)}</div>` : ''}
-    </div>
-    <div class="reminder-btns">
-      <button class="reminder-btn check" title="${r.done ? 'Mark undone' : 'Mark done'}">
-        <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="reminder-btn del" title="Delete">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </button>
-    </div>`;
-  card.querySelector('.check').addEventListener('click', () => toggleReminder(r.id));
-  card.querySelector('.del').addEventListener('click',   () => deleteReminder(r.id));
-  return card;
-}
+  // Show typing indicator
+  const typingEl = document.createElement('div');
+  typingEl.className = 'message message-assistant typing-indicator';
+  typingEl.innerHTML = '<div class="message-bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+  const list = document.getElementById('messageList');
+  list.appendChild(typingEl);
+  list.scrollTop = list.scrollHeight;
 
-function toggleReminder(id) {
-  const r = state.reminders.find(x => x.id === id);
-  if (r) { r.done = !r.done; saveKeys('reminders'); renderReminders(); }
-}
+  try {
+    if (!state.workspace) throw new Error('No workspace loaded');
 
-function deleteReminder(id) {
-  state.reminders = state.reminders.filter(x => x.id !== id);
-  saveKeys('reminders');
-  renderReminders();
-}
+    const systemPrompt = buildSystemPrompt(
+      state.workspace, state.integrations, state.context, state.buildiumData
+    );
 
-function updateBadge() {
-  const count = state.reminders.filter(r => !r.done).length;
-  document.getElementById('reminderBadge').textContent = count > 0 ? count : '';
-}
+    const recent = state.messages.slice(-20).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.text }]
+    }));
 
-function showForm(visible) {
-  const form = document.getElementById('reminderForm');
-  form.hidden = !visible;
-  if (visible) {
-    document.getElementById('reminderTitle').value = '';
-    document.getElementById('reminderNote').value  = '';
-    document.getElementById('reminderDue').value   = '';
-    document.getElementById('reminderTitle').focus();
+    const reply = await sendToGemini(recent, systemPrompt, screenshot);
+    typingEl.remove();
+    pushMessage('assistant', reply);
+  } catch (err) {
+    typingEl.remove();
+    pushMessage('assistant', `Sorry, I couldn't respond: ${err.message}`);
   }
 }
 
-function saveReminder() {
-  const title = document.getElementById('reminderTitle').value.trim();
-  if (!title) { document.getElementById('reminderTitle').focus(); return; }
-  state.reminders.unshift({
-    id: Date.now().toString(), title,
-    note: document.getElementById('reminderNote').value.trim(),
-    due:  document.getElementById('reminderDue').value,
-    done: false
-  });
-  saveKeys('reminders');
-  showForm(false);
-  renderReminders();
+// ── SCREEN CAPTURE ───────────────────────────────────
+
+async function captureScreen() {
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 75 });
+    return dataUrl;
+  } catch {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'HELIXIS_CAPTURE_TAB' }, res => {
+        if (res?.success) resolve(res.dataUrl);
+        else reject(new Error(res?.error || 'Capture failed'));
+      });
+    });
+  }
+}
+
+async function handleCaptureScreen() {
+  const btn = document.getElementById('captureScreenBtn');
+  btn.classList.add('capturing');
+  try {
+    const dataUrl = await captureScreen();
+    state.pendingScreenshot = dataUrl;
+    document.getElementById('screenshotIndicator').style.display = '';
+  } catch (e) {
+    console.warn('Helixis: capture failed:', e.message);
+  } finally {
+    btn.classList.remove('capturing');
+  }
+}
+
+function clearScreenshot() {
+  state.pendingScreenshot = null;
+  document.getElementById('screenshotIndicator').style.display = 'none';
 }
 
 // ── PAGE CONTEXT CAPTURE ──────────────────────────────
@@ -411,12 +561,27 @@ async function handleRefreshContext() {
   try {
     const ctx = await captureContext();
     state.context = ctx; saveKeys('context'); renderContext();
-    pushMessage('assistant', `Context refreshed from ${ctx.hostname}.`);
-  } catch (err) { pushMessage('assistant', `Refresh failed: ${err.message || err}`); }
-  finally {
+  } catch (err) {
+    console.warn('Helixis: context refresh failed:', err.message);
+  } finally {
     btn.disabled = false;
     btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11 6.5A4.5 4.5 0 1 1 6.5 2a4.5 4.5 0 0 1 3.18 1.32M11 2v3H8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg> Refresh Context`;
   }
+}
+
+// ── TIME FORMATTING ──────────────────────────────────
+
+function fmtTimeAgo(dt) {
+  if (!dt) return '';
+  const diff = Date.now() - new Date(dt).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dt).toLocaleDateString();
 }
 
 // ── UTILS ─────────────────────────────────────────────
@@ -445,11 +610,12 @@ async function init() {
   document.getElementById('sendBtn').addEventListener('click', handleSend);
   document.getElementById('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } });
 
-  // Reminders
-  renderReminders();
-  document.getElementById('addReminderBtn').addEventListener('click', () => showForm(true));
-  document.getElementById('reminderSave').addEventListener('click', saveReminder);
-  document.getElementById('reminderCancel').addEventListener('click', () => showForm(false));
+  // Screenshot
+  document.getElementById('captureScreenBtn').addEventListener('click', handleCaptureScreen);
+  document.getElementById('removeScreenshot').addEventListener('click', clearScreenshot);
+
+  // Activity
+  document.getElementById('refreshEventsBtn').addEventListener('click', loadEvents);
 
   // Actions
   const readCtxCard = document.getElementById('actionReadCtx');

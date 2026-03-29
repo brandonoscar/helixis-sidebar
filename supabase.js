@@ -1,10 +1,19 @@
 /*
  * Helixis Copilot — supabase.js
- * Lightweight Supabase client using fetch (no SDK dependency).
+ * Auth, workspace data, Buildium integration, webhook events, Gemini chat.
+ * All workspace references are dynamic — no hardcoded slugs.
  */
 
 const SUPABASE_URL  = 'https://bvmobfhsbvjqnopigfds.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2bW9iZmhzYnZqcW5vcGlnZmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0OTIyNjIsImV4cCI6MjA4ODA2ODI2Mn0.lsfkoTyfHmvnTPdd3o5qjLAGzoc4mNSUkCYmsjYpY9g';
+
+// All Buildium data categories to fetch
+const BUILDIUM_ENDPOINTS = [
+  'rentals', 'rentals/units', 'leases', 'tenants',
+  'associations', 'associations/units',
+  'workorders', 'tasks', 'vendors',
+  'bankaccounts', 'bills', 'outstandingbalances',
+];
 
 // ── AUTH ──────────────────────────────────────────────
 
@@ -22,7 +31,6 @@ async function supabaseSignIn(email, password) {
 }
 
 async function supabaseSignInWithGoogle() {
-  // Returns the OAuth URL — caller must redirect / open it
   return `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(chrome.identity.getRedirectURL())}`;
 }
 
@@ -33,48 +41,6 @@ async function supabaseRefreshToken(refreshToken) {
     body: JSON.stringify({ refresh_token: refreshToken })
   });
   if (!res.ok) throw new Error('Session expired');
-  return res.json();
-}
-
-// ── QUERIES ──────────────────────────────────────────
-
-function authHeaders(accessToken) {
-  return {
-    'Authorization': `Bearer ${accessToken}`,
-    'apikey': SUPABASE_ANON,
-    'Accept': 'application/json'
-  };
-}
-
-async function supabaseQuery(accessToken, table, { select = '*', filters = '', order = '' } = {}) {
-  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}`;
-  if (filters) url += `&${filters}`;
-  if (order)   url += `&order=${encodeURIComponent(order)}`;
-
-  const res = await fetch(url, { headers: authHeaders(accessToken) });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Query failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-// ── RPC (no auth needed) ─────────────────────────────
-
-async function supabaseRpc(fnName, params = {}) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_ANON,
-      'Authorization': `Bearer ${SUPABASE_ANON}`
-    },
-    body: JSON.stringify(params)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `RPC ${fnName} failed: ${res.status}`);
-  }
   return res.json();
 }
 
@@ -96,12 +62,9 @@ async function clearSession() {
 async function getValidToken() {
   const session = await loadSession();
   if (!session) return null;
-
   const expiresAt = session.expires_at || 0;
   const now = Math.floor(Date.now() / 1000);
-
   if (now < expiresAt - 60) return session.access_token;
-
   try {
     const refreshed = await supabaseRefreshToken(session.refresh_token);
     await saveSession(refreshed);
@@ -110,4 +73,222 @@ async function getValidToken() {
     await clearSession();
     return null;
   }
+}
+
+// ── QUERIES ──────────────────────────────────────────
+
+function authHeaders(accessToken) {
+  return {
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': SUPABASE_ANON,
+    'Accept': 'application/json'
+  };
+}
+
+async function supabaseQuery(accessToken, table, { select = '*', filters = '', order = '' } = {}) {
+  let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}`;
+  if (filters) url += `&${filters}`;
+  if (order)   url += `&order=${encodeURIComponent(order)}`;
+  const res = await fetch(url, { headers: authHeaders(accessToken) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Query failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── RPC ──────────────────────────────────────────────
+
+async function supabaseRpc(fnName, params = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `RPC ${fnName} failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── BUILDIUM DATA ────────────────────────────────────
+
+async function fetchAllBuildiumData(workspaceId) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/fetch-buildium-data`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({ workspace_id: workspaceId, endpoints: BUILDIUM_ENDPOINTS })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Buildium fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── WEBHOOK EVENTS ───────────────────────────────────
+
+async function fetchWebhookEvents(workspaceSlug, limit = 50) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_workspace_events`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({ workspace_slug: workspaceSlug, event_limit: limit })
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function dismissWebhookEvent(workspaceSlug, eventId) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/dismiss_workspace_event`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify({ workspace_slug: workspaceSlug, p_event_id: eventId })
+  });
+  return res.ok;
+}
+
+// ── GEMINI CHAT ──────────────────────────────────────
+
+async function sendToGemini(messages, systemPrompt, screenshot) {
+  const payload = { messages, systemPrompt };
+  if (screenshot) payload.screenshot = screenshot;
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/chat-gemini`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Chat failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.reply;
+}
+
+// ── DATA SUMMARIZATION ──────────────────────────────
+
+function summarizeRecords(records, type) {
+  if (!records || records.length === 0) return '';
+  const lines = [];
+  const limit = 20;
+
+  records.slice(0, limit).forEach(r => {
+    switch (type) {
+      case 'rentals':
+        lines.push(`- ${r.Name || 'Unnamed'} (ID: ${r.Id})${r.Address ? ` — ${r.Address.AddressLine1 || ''}${r.Address.City ? ', ' + r.Address.City : ''}${r.Address.State ? ', ' + r.Address.State : ''}` : ''}${r.NumberOfUnits ? ' | ' + r.NumberOfUnits + ' units' : ''}`);
+        break;
+      case 'rentals/units':
+        lines.push(`- Unit ${r.UnitNumber || r.Id}${r.MarketRent ? ' | Rent: $' + r.MarketRent : ''}${r.Address ? ' at ' + (r.Address.AddressLine1 || '') : ''}`);
+        break;
+      case 'leases':
+        lines.push(`- Lease ${r.Id}: ${r.LeaseType || ''} | ${r.LeaseStatus || r.Status || ''} | Start: ${r.LeaseFromDate || '?'} End: ${r.LeaseToDate || '?'}${r.Rent ? ' | $' + r.Rent + '/mo' : ''}`);
+        break;
+      case 'tenants':
+        lines.push(`- ${r.FirstName || ''} ${r.LastName || ''} (ID: ${r.Id})${r.Email ? ' | ' + r.Email : ''}${r.PhoneNumbers?.length ? ' | ' + r.PhoneNumbers[0].Number : ''}`);
+        break;
+      case 'associations':
+        lines.push(`- ${r.Name || 'Unnamed'} (ID: ${r.Id})${r.Address ? ` — ${r.Address.AddressLine1 || ''}` : ''}`);
+        break;
+      case 'workorders':
+        lines.push(`- WO#${r.Id}: ${r.Title || r.Subject || 'No title'} | Status: ${r.Status || '?'}${r.Priority ? ' | Priority: ' + r.Priority : ''}`);
+        break;
+      case 'tasks':
+        lines.push(`- Task#${r.Id}: ${r.Title || 'No title'} | Status: ${r.TaskStatus || r.Status || '?'}${r.DueDate ? ' | Due: ' + r.DueDate : ''}`);
+        break;
+      case 'vendors':
+        lines.push(`- ${r.CompanyName || r.FirstName + ' ' + r.LastName || 'Unnamed'} (ID: ${r.Id})${r.Category ? ' | ' + r.Category : ''}`);
+        break;
+      case 'bankaccounts':
+        lines.push(`- ${r.Name || 'Account'} (ID: ${r.Id})${r.AccountType ? ' | ' + r.AccountType : ''}${r.CurrentBalance != null ? ' | Balance: $' + r.CurrentBalance : ''}`);
+        break;
+      case 'bills':
+        lines.push(`- Bill#${r.Id}: $${r.Amount || '?'} | ${r.PaidStatus || r.Status || '?'}${r.DueDate ? ' | Due: ' + r.DueDate : ''}${r.Vendor?.Name ? ' | Vendor: ' + r.Vendor.Name : ''}`);
+        break;
+      case 'outstandingbalances':
+        lines.push(`- ${r.Name || r.AssociatedUnitId || 'ID:' + r.Id}: $${r.TotalBalance || r.Balance || '?'} outstanding`);
+        break;
+      default:
+        lines.push(`- ${JSON.stringify(r).slice(0, 120)}`);
+    }
+  });
+
+  if (records.length > limit) lines.push(`... and ${records.length - limit} more`);
+  return lines.join('\n');
+}
+
+// ── SYSTEM PROMPT BUILDER ────────────────────────────
+
+function buildSystemPrompt(workspace, integrations, pageContext, buildiumData) {
+  let prompt = `You are Helixis Copilot, an AI assistant for property management companies. You are helping the team at "${workspace.name}".
+
+Workspace details:
+- Name: ${workspace.name}
+- Created: ${workspace.created_at}
+- Onboarding: ${workspace.onboarding_completed_at ? 'Complete' : 'In progress'}`;
+
+  if (integrations && integrations.length > 0) {
+    prompt += '\n\nConnected integrations:';
+    integrations.forEach(intg => {
+      prompt += `\n- ${intg.provider} (${intg.status}, ${intg.environment})`;
+      if (intg.last_test_result?.message) prompt += ` — ${intg.last_test_result.message}`;
+    });
+  }
+
+  if (buildiumData) {
+    prompt += '\n\n=== LIVE BUILDIUM DATA (from API) ===';
+    const sections = [
+      { key: 'rentals', label: 'Rental Properties' },
+      { key: 'rentals/units', label: 'Rental Units' },
+      { key: 'leases', label: 'Leases' },
+      { key: 'tenants', label: 'Tenants' },
+      { key: 'associations', label: 'Associations' },
+      { key: 'associations/units', label: 'Association Units' },
+      { key: 'workorders', label: 'Work Orders (Maintenance)' },
+      { key: 'tasks', label: 'Tasks' },
+      { key: 'vendors', label: 'Vendors' },
+      { key: 'bankaccounts', label: 'Bank Accounts' },
+      { key: 'bills', label: 'Bills' },
+      { key: 'outstandingbalances', label: 'Outstanding Balances' },
+    ];
+    sections.forEach(({ key, label }) => {
+      const section = buildiumData[key];
+      if (!section || section.error) return;
+      const records = section.data || [];
+      if (records.length === 0) return;
+      prompt += `\n\n${label} (${section.count} total):`;
+      prompt += '\n' + summarizeRecords(records, key);
+    });
+  }
+
+  if (pageContext) {
+    prompt += `\n\nThe user is currently viewing:
+- Site: ${pageContext.hostname}
+- Title: ${pageContext.title}
+- Page text (truncated): ${pageContext.text?.slice(0, 2000) || '(none)'}`;
+  }
+
+  prompt += '\n\nYou have LIVE access to the data above. Answer questions about properties, tenants, leases, maintenance, accounting, and tasks using this data. Be concise, helpful, and professional.';
+
+  return prompt;
 }

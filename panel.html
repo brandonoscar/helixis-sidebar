@@ -43,19 +43,25 @@
           <span class="header-workspace" id="headerWorkspace"></span>
         </div>
       </div>
-      <button class="logout-btn" id="logoutBtn" title="Sign out">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2M9 10l3-3-3-3M12 7H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <div class="header-right">
+        <div class="status-pill" id="statusPill">
+          <span class="status-dot"></span>
+          <span class="status-label" id="statusLabel">Loading</span>
+        </div>
+        <button class="logout-btn" id="logoutBtn" title="Sign out">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2M9 10l3-3-3-3M12 7H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <!-- ── TAB BAR ──────────────────────────────────── -->
     <nav class="tab-bar">
       <button class="tab" data-tab="workspace">Workspace</button>
       <button class="tab" data-tab="chat">Chat</button>
-      <button class="tab" data-tab="reminders">
-        Reminders<span class="badge" id="reminderBadge"></span>
+      <button class="tab" data-tab="activity">
+        Activity<span class="badge" id="activityBadge"></span>
       </button>
       <button class="tab" data-tab="actions">Actions</button>
       <button class="tab" data-tab="context">Context</button>
@@ -95,10 +101,20 @@
               </svg>
             </div>
             <div class="chat-empty-title">How can I help?</div>
-            <div class="chat-empty-desc">Ask anything, or capture the page from the Actions tab.</div>
+            <div class="chat-empty-desc">Ask about properties, tenants, leases, maintenance, or anything else.</div>
           </div>
         </div>
+        <div class="screenshot-bar" id="screenshotIndicator" style="display:none">
+          <span class="screenshot-badge">Screenshot attached</span>
+          <button class="screenshot-remove" id="removeScreenshot" title="Remove screenshot">&#10005;</button>
+        </div>
         <div class="input-bar">
+          <button class="capture-btn" id="captureScreenBtn" title="Capture screen">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1.5" y="3" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+              <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+          </button>
           <input type="text" id="chatInput" placeholder="Message... or / for commands" autocomplete="off" spellcheck="false" />
           <button class="send-btn" id="sendBtn" title="Send">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -108,27 +124,18 @@
         </div>
       </div>
 
-      <!-- REMINDERS ─────────────────────────────────── -->
-      <div class="view" id="view-reminders">
+      <!-- ACTIVITY ─────────────────────────────────── -->
+      <div class="view" id="view-activity">
         <div class="view-header">
-          <span class="view-title">Reminders</span>
-          <button class="icon-btn" id="addReminderBtn" title="Add reminder">
+          <span class="view-title">ACTIVITY</span>
+          <button class="icon-btn" id="refreshEventsBtn" title="Refresh events">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M10 6A4 4 0 1 1 6 2a4 4 0 0 1 2.83 1.17M10 2v2.5H7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
         </div>
         <div class="view-inner">
-          <div class="reminder-form" id="reminderForm" hidden>
-            <input type="text"           id="reminderTitle" placeholder="Reminder title" />
-            <input type="text"           id="reminderNote"  placeholder="Note (optional)" />
-            <input type="datetime-local" id="reminderDue" />
-            <div class="form-row">
-              <button class="form-btn form-btn-primary"   id="reminderSave">Save</button>
-              <button class="form-btn form-btn-secondary" id="reminderCancel">Cancel</button>
-            </div>
-          </div>
-          <div id="remindersList"></div>
+          <div id="eventsList"></div>
         </div>
       </div>
 
@@ -159,13 +166,6 @@
               <svg viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3" width="11" height="9.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 7h6M5 9.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             </div>
             <div class="action-text"><div class="action-title">Draft Reply</div><div class="action-desc">Compose a response for this page</div></div>
-            <div class="action-tag soon-tag">Soon</div>
-          </div>
-          <div class="action-card disabled">
-            <div class="action-icon muted">
-              <svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8h9M9 4.5l3.5 3.5L9 11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div class="action-text"><div class="action-title">Run Actions</div><div class="action-desc">Execute page-level automations</div></div>
             <div class="action-tag soon-tag">Soon</div>
           </div>
         </div>
