@@ -602,7 +602,11 @@ async function handleSend() {
   const screenshot = state.pendingScreenshot;
   clearScreenshot();
 
-  pushMessage('user', text);
+  if (screenshot) {
+    pushMessage('user', `[Screenshot attached] ${text}`);
+  } else {
+    pushMessage('user', text);
+  }
 
   // Check if user wants to create a task — open the form
   if (isTaskCreationRequest(text)) {
@@ -681,29 +685,49 @@ async function handleSend() {
 // ── SCREEN CAPTURE ───────────────────────────────────
 
 async function captureScreen() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url || '';
+  if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:') || url.startsWith('chrome-search://')) {
+    throw new Error('Cannot capture browser internal pages. Navigate to a website first.');
+  }
+
   try {
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 75 });
     return dataUrl;
-  } catch {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'HELIXIS_CAPTURE_TAB' }, res => {
-        if (res?.success) resolve(res.dataUrl);
-        else reject(new Error(res?.error || 'Capture failed'));
-      });
-    });
+  } catch (directErr) {
+    console.warn('Helixis: direct capture failed, trying service worker:', directErr.message);
   }
+
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: 'HELIXIS_CAPTURE_TAB' }, res => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else if (res?.success) {
+        resolve(res.dataUrl);
+      } else {
+        reject(new Error(res?.error || 'Screen capture failed'));
+      }
+    });
+  });
 }
 
 async function handleCaptureScreen() {
   const btn = document.getElementById('captureScreenBtn');
+  btn.disabled = true;
   btn.classList.add('capturing');
   try {
     const dataUrl = await captureScreen();
     state.pendingScreenshot = dataUrl;
-    document.getElementById('screenshotIndicator').style.display = '';
+    const indicator = document.getElementById('screenshotIndicator');
+    indicator.style.display = '';
+    indicator.title = 'Screenshot attached — will be sent with your next message';
+    document.getElementById('chatInput').focus();
+    switchTab('chat');
   } catch (e) {
-    console.warn('Helixis: capture failed:', e.message);
+    switchTab('chat');
+    pushMessage('assistant', e.message);
   } finally {
+    btn.disabled = false;
     btn.classList.remove('capturing');
   }
 }
