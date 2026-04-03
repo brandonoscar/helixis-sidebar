@@ -122,6 +122,61 @@ body {
   50%       { opacity: 0.4; }
 }
 
+/* Status variants */
+.status-pill.status-thinking {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: #a78bfa;
+}
+
+.status-pill.status-thinking .status-dot {
+  background: var(--accent);
+  animation: pulse-fast 1s ease-in-out infinite;
+}
+
+.status-pill.status-reading {
+  background: rgba(100, 210, 255, 0.10);
+  border-color: rgba(100, 210, 255, 0.22);
+  color: #64d2ff;
+}
+
+.status-pill.status-reading .status-dot {
+  background: #64d2ff;
+  animation: pulse-fast 0.8s ease-in-out infinite;
+}
+
+.status-pill.status-searching {
+  background: var(--warn-soft);
+  border-color: rgba(255, 159, 10, 0.22);
+  color: var(--warn);
+}
+
+.status-pill.status-searching .status-dot {
+  background: var(--warn);
+  animation: pulse-fast 0.6s ease-in-out infinite;
+}
+
+.status-pill.status-writing {
+  background: var(--success-soft);
+  border-color: rgba(48, 209, 88, 0.22);
+  color: var(--success);
+}
+
+.status-pill.status-writing .status-dot {
+  background: var(--success);
+  animation: pulse-fast 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-fast {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Status pill transition */
+.status-pill {
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
 /* ── TAB BAR ─────────────────────────────────────── */
 
 .tab-bar {
@@ -339,6 +394,113 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+}
+
+/* Tool-use blocks (agentic steps) */
+.tool-use-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  margin: 4px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  max-width: 86%;
+  animation: tool-appear 200ms ease-out;
+}
+
+.tool-use-block.active {
+  border-color: var(--accent-border);
+  background: linear-gradient(145deg, rgba(124, 111, 240, 0.05), var(--surface));
+}
+
+.tool-use-block.done {
+  opacity: 0.6;
+}
+
+.tool-use-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.tool-use-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tool-use-icon.spinning svg {
+  animation: spin 1s linear infinite;
+}
+
+.tool-use-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-use-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  margin-bottom: 1px;
+}
+
+.tool-use-text {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.tool-use-result {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+  font-style: italic;
+}
+
+@keyframes tool-appear {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Streaming cursor */
+.message-bubble.streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 13px;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink-cursor 600ms step-end infinite;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+/* Message appear animation */
+.message {
+  animation: msg-appear 200ms ease-out;
+}
+
+@keyframes msg-appear {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Input bar */
