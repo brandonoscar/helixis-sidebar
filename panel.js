@@ -97,13 +97,7 @@ function handleSend() {
   input.value = '';
   pushMessage('user', text);
 
-  // Stub assistant response — replace with real API call later
-  setTimeout(() => {
-    pushMessage(
-      'assistant',
-      "AI responses are coming soon! For now, try the Actions tab to capture page context."
-    );
-  }, 500);
+  // Chat is view-only for now — no AI backend connected yet.
 }
 
 // ── REMINDERS ─────────────────────────────────────────
