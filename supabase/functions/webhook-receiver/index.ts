@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
     const topic = payload.topic as string;
     eventName = topic ?? "unknown";
     eventDatetime = (payload.update_timestamp ?? payload.message_sent_at ?? new Date().toISOString()) as string;
-    normalizedType = APPFOLIO_TOPIC_TO_ENTITY[topic] ?? topic?.replace(/_/g, "") ?? "unknown";
+    normalizedType = APPFOLIO_TOPIC_TO_ENTITY[topic] ?? topic ?? "unknown";
     entityId = payload.entity_id ? String(payload.entity_id) : null;
     accountId = payload.client_id ? String(payload.client_id) : null;
   } else {

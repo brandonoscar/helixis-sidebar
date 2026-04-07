@@ -59,6 +59,7 @@ export class AppFolioClient {
       owner: `/owners/${id}`,
       vendor: `/vendors/${id}`,
       lead: `/leads/${id}`,
+      workorder: `/work_orders/${id}`,
     };
 
     const path = pathMap[entityType.toLowerCase()];
