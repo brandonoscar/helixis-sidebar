@@ -513,19 +513,26 @@ function renderEntities(entities) {
     let details = "";
     if (ent.snapshot) {
       const s = ent.snapshot;
-      const name = s.Name || s.name || s.PropertyName || s.UnitNumber || "";
-      const addr = s.Address?.AddressLine1 || s.address || "";
+      // Handle both Buildium (PascalCase) and AppFolio (snake_case/lowercase) fields
+      const name = s.Name || s.name || s.PropertyName || s.UnitNumber || s.marketing_title || s.first_name
+        ? (s.first_name && s.last_name ? `${s.first_name} ${s.last_name}` : s.Name || s.name || s.PropertyName || s.UnitNumber || s.marketing_title || "")
+        : "";
+      const addr = s.Address?.AddressLine1 || s.address?.street || s.address || "";
       if (name) details += `<div class="entity-detail">${escapeHtml(name)}</div>`;
       if (addr) details += `<div class="entity-detail sub">${escapeHtml(addr)}</div>`;
     }
 
-    // Deep link to Buildium (#extension gap: deep linking)
-    const buildiumLink = currentContext?.provider === "buildium" && currentContext?.hostname
-      ? `https://${currentContext.hostname}/manager/app/${ent.type === "workorder" ? "maintenance" : ent.type + "s"}/${id}`
-      : "";
+    // Deep link to provider
+    let providerLink = "";
+    if (currentContext?.provider === "buildium" && currentContext?.hostname) {
+      providerLink = `https://${currentContext.hostname}/manager/app/${ent.type === "workorder" ? "maintenance" : ent.type + "s"}/${id}`;
+    } else if (currentContext?.provider === "appfolio" && currentContext?.hostname) {
+      const afType = ent.type === "workorder" ? "work_orders" : ent.type + "s";
+      providerLink = `https://${currentContext.hostname}/${afType}/${id}`;
+    }
 
     return `
-      <div class="entity-card${buildiumLink ? " entity-clickable" : ""}" ${buildiumLink ? `data-link="${escapeHtml(buildiumLink)}"` : ""}>
+      <div class="entity-card${providerLink ? " entity-clickable" : ""}" ${providerLink ? `data-link="${escapeHtml(providerLink)}"` : ""}>
         <div class="entity-icon">${icon}</div>
         <div class="entity-info">
           <div class="entity-type">${label} #${escapeHtml(String(id))}</div>

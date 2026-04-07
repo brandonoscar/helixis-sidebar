@@ -46,10 +46,36 @@ const PROVIDERS = [
       { pattern: /\/accounting/i, type: "accounting" },
     ],
   },
+  {
+    name: "appfolio",
+    hostPatterns: [/\.appfolio\.com$/i, /\.appfoliopropertymanager\.com$/i],
+    pagePatterns: [
+      { pattern: /\/properties\/?$/i, type: "property_list" },
+      { pattern: /\/properties\/(\d+)/i, type: "property_detail", idGroup: 1 },
+      { pattern: /\/units\/?$/i, type: "unit_list" },
+      { pattern: /\/units\/(\d+)/i, type: "unit_detail", idGroup: 1 },
+      { pattern: /\/tenants?\/?$/i, type: "tenant_list" },
+      { pattern: /\/tenants?\/(\d+)/i, type: "tenant_detail", idGroup: 1 },
+      { pattern: /\/leases?\/?$/i, type: "lease_list" },
+      { pattern: /\/leases?\/(\d+)/i, type: "lease_detail", idGroup: 1 },
+      { pattern: /\/listings?\/?$/i, type: "listing_list" },
+      { pattern: /\/listings?\/(\d+)/i, type: "listing_detail", idGroup: 1 },
+      { pattern: /\/owners?\/?$/i, type: "owner_list" },
+      { pattern: /\/owners?\/(\d+)/i, type: "owner_detail", idGroup: 1 },
+      { pattern: /\/vendors?\/?$/i, type: "vendor_list" },
+      { pattern: /\/vendors?\/(\d+)/i, type: "vendor_detail", idGroup: 1 },
+      { pattern: /\/leads?\/?$/i, type: "lead_list" },
+      { pattern: /\/leads?\/(\d+)/i, type: "lead_detail", idGroup: 1 },
+      { pattern: /\/work_orders?\/?$/i, type: "workorder_list" },
+      { pattern: /\/work_orders?\/(\d+)/i, type: "workorder_detail", idGroup: 1 },
+      { pattern: /\/reports?\/?$/i, type: "report_list" },
+      { pattern: /\/dashboard/i, type: "dashboard" },
+    ],
+  },
 ];
 
 const PAGE_TYPE_TO_ENTITY = {
-  property_detail: "rental",
+  property_detail: "property",
   unit_detail: "unit",
   lease_detail: "lease",
   tenant_detail: "tenant",
@@ -59,6 +85,9 @@ const PAGE_TYPE_TO_ENTITY = {
   association_detail: "association",
   task_detail: "task",
   applicant_detail: "applicant",
+  listing_detail: "listing",
+  owner_detail: "owner",
+  lead_detail: "lead",
 };
 
 // ─── Core Analysis ──────────────────────────────────────────────────
