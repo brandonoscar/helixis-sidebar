@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- ── LOGIN SCREEN ───────────────────────────────── -->
+  <!-- ── LOGIN SCREEN ───────────────── -->
   <div class="screen" id="loginScreen" style="display:none">
     <div class="login-container">
       <div class="login-logo">
@@ -27,46 +27,10 @@
     </div>
   </div>
 
-  <!-- ── ONBOARDING SCREEN ──────────────────────────── -->
-  <div class="screen" id="onboardingScreen" style="display:none">
-    <div class="onboarding-container">
-      <div class="login-logo">
-        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M6 1.5L10.5 6L6 10.5L1.5 6Z" fill="white" fill-opacity="0.95"/>
-        </svg>
-      </div>
-      <h2 class="login-title">Set Up Your AI Profile</h2>
-      <p class="login-desc">Help Helixis understand your business so the AI can give specific, accurate answers.</p>
-      <form id="onboardingForm" class="onboarding-form">
-        <label class="form-label">Business Name</label>
-        <input type="text" id="obBusinessName" class="login-input" placeholder="e.g. Acme Property Management" required />
-        <label class="form-label">Portfolio Size &amp; Types</label>
-        <textarea id="obPortfolio" class="login-textarea" placeholder="e.g. 200 units, mix of single-family and small multifamily across Dallas-Fort Worth" rows="2"></textarea>
-        <label class="form-label">Maintenance Rules</label>
-        <textarea id="obMaintenance" class="login-textarea" placeholder="e.g. Emergency = plumbing/HVAC/fire, dispatch vendor immediately. Non-emergency = create work order, schedule within 48hrs." rows="3"></textarea>
-        <label class="form-label">Leasing Rules</label>
-        <textarea id="obLeasing" class="login-textarea" placeholder="e.g. Minimum credit score 620, income 3x rent, no eviction history. Standard lease 12 months." rows="2"></textarea>
-        <label class="form-label">Payment &amp; Late Fee Policy</label>
-        <textarea id="obPayment" class="login-textarea" placeholder="e.g. Rent due 1st, 5-day grace period, $50 late fee on 6th, $5/day after." rows="2"></textarea>
-        <label class="form-label">Owner Approval Rules</label>
-        <textarea id="obOwnerApproval" class="login-textarea" placeholder="e.g. Repairs over $500 need owner approval. Capital expenditures always need approval." rows="2"></textarea>
-        <label class="form-label">Communication Preferences</label>
-        <textarea id="obCommunication" class="login-textarea" placeholder="e.g. Professional but friendly. Always address tenants by first name." rows="2"></textarea>
-        <label class="form-label">Things the AI Should Never Do</label>
-        <textarea id="obDoNotDo" class="login-textarea" placeholder="e.g. Never promise specific move-in dates. Never disclose owner contact info to tenants." rows="2"></textarea>
-        <label class="form-label">Anything Else</label>
-        <textarea id="obCustom" class="login-textarea" placeholder="e.g. We manage some Section 8 properties with different inspection requirements." rows="2"></textarea>
-        <button type="submit" class="btn btn-primary login-btn" id="onboardingSubmitBtn">Generate AI Profile</button>
-        <button type="button" class="btn btn-ghost" id="skipOnboardingBtn">Skip for Now</button>
-        <div class="login-error" id="onboardingError"></div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ── MAIN APP ───────────────────────────────────── -->
+  <!-- ── MAIN APP ────────────────────── -->
   <div class="screen" id="appScreen" style="display:none">
 
-    <!-- ── HEADER ─────────────────────────────────────── -->
+    <!-- ── HEADER ─────────────────────── -->
     <header class="header">
       <div class="header-brand">
         <div class="header-logo">
@@ -87,14 +51,14 @@
       </div>
     </header>
 
-    <!-- ── CONNECTION BANNER ───────────────────────────── -->
+    <!-- ── CONNECTION BANNER ───────────────── -->
     <div class="connection-banner" id="connectionBanner" style="display:none">
       <span class="connection-icon">!</span>
       <span id="connectionText">Unable to reach Helixis backend</span>
       <button class="btn btn-sm" id="retryConnectionBtn">Retry</button>
     </div>
 
-    <!-- ── CONTEXT STRIP ──────────────────────────────── -->
+    <!-- ── CONTEXT STRIP ────────────────── -->
     <div class="context-strip" id="contextStrip">
       <div class="context-label">Active Context</div>
       <div class="context-value">
@@ -108,20 +72,19 @@
       <div class="context-meta" id="contextMeta"></div>
     </div>
 
-    <!-- ── TAB BAR ─────────────────────────────────────── -->
+    <!-- ── TAB BAR ─────────────────────── -->
     <nav class="tab-bar">
       <button class="tab active" data-tab="overview">Overview</button>
       <button class="tab" data-tab="tasks">Tasks</button>
       <button class="tab" data-tab="chat">Chat</button>
     </nav>
 
-    <!-- ── MAIN ───────────────────────────────────────── -->
+    <!-- ── MAIN ───────────────────────── -->
     <main class="main">
 
       <!-- OVERVIEW TAB -->
       <div class="tab-panel active" id="tab-overview">
 
-        <!-- Detected Entities -->
         <section class="section" id="entitiesSection" style="display:none">
           <div class="section-header">
             <span class="section-title">Detected Entities</span>
@@ -130,7 +93,6 @@
           <div class="entity-list" id="entityList"></div>
         </section>
 
-        <!-- Related Tasks -->
         <section class="section" id="relatedTasksSection" style="display:none">
           <div class="section-header">
             <span class="section-title">Related Tasks</span>
@@ -139,7 +101,6 @@
           <div class="task-list" id="relatedTaskList"></div>
         </section>
 
-        <!-- AI Insight -->
         <section class="section" id="aiInsightSection" style="display:none">
           <div class="section-header">
             <span class="section-title">AI Insight</span>
@@ -149,7 +110,6 @@
           <div class="insight-action" id="insightAction" style="display:none"></div>
         </section>
 
-        <!-- Recent Activity -->
         <section class="section" id="activitySection" style="display:none">
           <div class="section-header">
             <span class="section-title">Recent Activity</span>
@@ -157,7 +117,6 @@
           <div class="activity-list" id="activityList"></div>
         </section>
 
-        <!-- Empty State -->
         <div class="empty-state" id="overviewEmpty">
           <div class="empty-icon">
             <svg viewBox="0 0 18 18" fill="none">
@@ -214,7 +173,7 @@
 
     </main>
 
-    <!-- ── SETTINGS DRAWER ─────────────────────────────── -->
+    <!-- ── SETTINGS DRAWER ───────────────── -->
     <div class="settings-drawer" id="settingsDrawer" style="display:none">
       <div class="settings-header">
         <span class="section-title">Settings</span>
@@ -232,18 +191,12 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-label">Business Profile</div>
-        <div class="settings-desc" id="profileStatus">Not configured</div>
-        <button class="btn btn-sm" id="editProfileBtn">Edit Profile</button>
-      </div>
-
-      <div class="settings-section">
         <div class="settings-label">Account</div>
         <button class="btn btn-sm btn-danger" id="logoutBtn">Sign Out</button>
       </div>
     </div>
 
-    <!-- ── FOOTER ─────────────────────────────────────── -->
+    <!-- ── FOOTER ─────────────────────── -->
     <footer class="footer">
       <div class="footer-status">
         <div class="footer-dot" id="footerDot"></div>
