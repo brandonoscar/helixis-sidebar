@@ -711,3 +711,79 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--surface-elevated); }
+
+/* ── AUTH CARD ──────────────────────────────────────── */
+
+.auth-card {
+  margin: 16px 12px;
+  padding: 16px;
+  background: var(--surface, #16161d);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 12px;
+}
+.auth-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.auth-desc  { font-size: 12px; opacity: 0.65; margin-bottom: 12px; line-height: 1.45; }
+.auth-card input {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: inherit;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  outline: none;
+}
+.auth-card input:focus { border-color: #7c6af7; }
+.auth-btn {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #7c6af7;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.auth-btn:disabled { opacity: 0.5; cursor: default; }
+.auth-code-row { margin-top: 8px; }
+.auth-error { margin-top: 8px; font-size: 12px; color: #f87171; min-height: 14px; }
+
+/* ── AGENT ACTIVITY + CONFIRM ───────────────────────── */
+
+.activity-line {
+  margin: 2px 12px;
+  font-size: 11px;
+  opacity: 0.55;
+  line-height: 1.5;
+}
+.message-bubble.message-error {
+  background: rgba(248,113,113,0.12);
+  border: 1px solid rgba(248,113,113,0.3);
+}
+.status-pill.busy .status-dot { background: #fbbf24; }
+
+.confirm-card {
+  margin: 8px 12px;
+  padding: 12px 14px;
+  background: rgba(124,106,247,0.08);
+  border: 1px solid rgba(124,106,247,0.35);
+  border-radius: 12px;
+}
+.confirm-title   { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.confirm-details { font-size: 12px; opacity: 0.7; margin-bottom: 6px; line-height: 1.45; }
+.confirm-item    { font-size: 12px; opacity: 0.7; line-height: 1.5; }
+.confirm-btn-row { display: flex; gap: 8px; margin-top: 10px; }
+.confirm-btn {
+  flex: 1;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+.confirm-btn.approve { background: #22c55e; color: #06130a; }
+.confirm-btn.deny    { background: rgba(255,255,255,0.08); color: inherit; border: 1px solid rgba(255,255,255,0.15); }
+.confirm-btn:disabled { opacity: 0.5; cursor: default; }

@@ -39,6 +39,22 @@
 
     <!-- CHAT ──────────────────────────────────────── -->
     <div class="view" id="view-chat">
+
+      <!-- Sign-in card (shown when signed out / unconfigured) -->
+      <div class="auth-card" id="authCard" hidden>
+        <div class="auth-title" id="authTitle">Sign in to Helixis</div>
+        <div class="auth-desc" id="authDesc">Use the email on your Helixis workspace — we'll send a 6-digit code.</div>
+        <div id="authForm">
+          <input type="email" id="authEmail" placeholder="you@company.com" autocomplete="email" />
+          <button class="auth-btn" id="authSend">Email me a code</button>
+          <div class="auth-code-row" id="authCodeRow" hidden>
+            <input id="authCode" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" />
+            <button class="auth-btn" id="authVerify">Verify</button>
+          </div>
+        </div>
+        <div class="auth-error" id="authError"></div>
+      </div>
+
       <div class="messages" id="messageList">
         <div class="chat-empty" id="chatEmpty">
           <div class="chat-empty-logo">
@@ -190,6 +206,6 @@
 
   </div><!-- /.views -->
 
-  <script src="panel.js"></script>
+  <script type="module" src="panel.js"></script>
 </body>
 </html>

@@ -1,33 +1,59 @@
 /*
  * Helixis Copilot — panel.js
- * Tab switching, chat, reminders, actions, context — all local, no backend.
+ *
+ * Chat is wired to the AgenticHelixis backend (/agent/run SSE): every
+ * turn auto-attaches the active tab's page context, streams the
+ * orchestrator's tokens/tool activity live, and renders confirmation
+ * cards the user can approve/deny. Reminders, actions, and context
+ * tabs remain local.
+ *
+ * Slash commands: /new (fresh thread), /signout
  */
+
+import { configured } from './config.js';
+import { sendOtp, verifyOtp, getAccessToken, getSessionInfo, signOut } from './auth.js';
+import { bootstrapCompany, runAgent, confirmAction } from './agent.js';
 
 // ── STATE ─────────────────────────────────────────────
 
 const state = {
   activeTab: 'chat',
-  messages:  [],        // [{ role, text, ts }]
+  messages:  [],        // [{ role, text, ts, kind? }]  kind: 'activity' | 'error'
   reminders: [],        // [{ id, title, note, due, done }]
-  context:   null       // { hostname, title, text, url, ts }
+  context:   null,      // { hostname, title, text, url, ts }
+  companyId: null,
+  chatSessionId: null,
+  signedIn:  false,
+  running:   false
 };
 
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
   const data = await chrome.storage.local.get(
-    ['activeTab', 'messages', 'reminders', 'context']
+    ['activeTab', 'messages', 'reminders', 'context', 'companyId', 'chatSessionId']
   );
-  if (data.activeTab) state.activeTab = data.activeTab;
-  if (data.messages)  state.messages  = data.messages;
-  if (data.reminders) state.reminders = data.reminders;
-  if (data.context)   state.context   = data.context;
+  if (data.activeTab)     state.activeTab     = data.activeTab;
+  if (data.messages)      state.messages      = data.messages;
+  if (data.reminders)     state.reminders     = data.reminders;
+  if (data.context)       state.context       = data.context;
+  if (data.companyId)     state.companyId     = data.companyId;
+  if (data.chatSessionId) state.chatSessionId = data.chatSessionId;
 }
 
 function saveKeys(...keys) {
   const patch = {};
   keys.forEach(k => { patch[k] = state[k]; });
   chrome.storage.local.set(patch);
+}
+
+// ── HEADER STATUS ─────────────────────────────────────
+
+function setStatus(text, busy = false) {
+  const pill = document.querySelector('.status-pill');
+  if (!pill) return;
+  pill.lastChild.textContent = ` ${text}`;
+  pill.classList.toggle('busy', busy);
 }
 
 // ── TAB SWITCHING ─────────────────────────────────────
@@ -46,13 +72,94 @@ function switchTab(name) {
   if (name === 'context') renderContext();
 }
 
+// ── AUTH UI ───────────────────────────────────────────
+
+function showAuthUI(visible) {
+  document.getElementById('authCard').hidden = !visible;
+  document.querySelector('.input-bar').style.display = visible ? 'none' : '';
+}
+
+async function refreshAuthState() {
+  if (!configured()) {
+    setStatus('Not configured');
+    showAuthUI(true);
+    document.getElementById('authTitle').textContent = 'Setup required';
+    document.getElementById('authDesc').textContent =
+      'Paste the Supabase anon key into config.js and reload the extension.';
+    document.getElementById('authForm').hidden = true;
+    return;
+  }
+
+  const token = await getAccessToken();
+  state.signedIn = Boolean(token);
+
+  if (state.signedIn) {
+    showAuthUI(false);
+    const info = await getSessionInfo();
+    setStatus(info?.email || 'Ready');
+    // Idempotent company provisioning — same call the web app makes.
+    if (!state.companyId) {
+      try {
+        state.companyId = await bootstrapCompany();
+        saveKeys('companyId');
+      } catch (err) {
+        pushMessage('assistant', `⚠ Could not reach Helixis: ${err.message}`, 'error');
+      }
+    }
+  } else {
+    showAuthUI(true);
+    setStatus('Signed out');
+  }
+}
+
+async function handleAuthSend() {
+  const email = document.getElementById('authEmail').value.trim();
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+  if (!email.includes('@')) { errEl.textContent = 'Enter a valid email.'; return; }
+
+  const btn = document.getElementById('authSend');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    await sendOtp(email);
+    document.getElementById('authCodeRow').hidden = false;
+    document.getElementById('authCode').focus();
+    btn.textContent = 'Resend code';
+  } catch (err) {
+    errEl.textContent = err.message;
+    btn.textContent = 'Email me a code';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handleAuthVerify() {
+  const email = document.getElementById('authEmail').value.trim();
+  const code  = document.getElementById('authCode').value.trim();
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+
+  const btn = document.getElementById('authVerify');
+  btn.disabled = true;
+  try {
+    await verifyOtp(email, code);
+    await refreshAuthState();
+    pushMessage('assistant', '✓ Signed in. Ask me anything about your properties.');
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ── CHAT ──────────────────────────────────────────────
 
 function renderMessages() {
   const list  = document.getElementById('messageList');
   const empty = document.getElementById('chatEmpty');
 
-  list.querySelectorAll('.message').forEach(m => m.remove());
+  list.querySelectorAll('.message, .activity-line, .confirm-card').forEach(m => m.remove());
 
   if (state.messages.length === 0) {
     empty.style.display = '';
@@ -67,43 +174,228 @@ function renderMessages() {
 }
 
 function buildMsgEl(msg) {
+  if (msg.kind === 'activity') {
+    const line = document.createElement('div');
+    line.className = 'activity-line';
+    line.textContent = msg.text;
+    return line;
+  }
   const row    = document.createElement('div');
   row.className = `message message-${msg.role}`;
   const bubble = document.createElement('div');
-  bubble.className  = 'message-bubble';
+  bubble.className  = 'message-bubble' + (msg.kind === 'error' ? ' message-error' : '');
   bubble.textContent = msg.text;
   row.appendChild(bubble);
   return row;
 }
 
-function pushMessage(role, text) {
-  const msg = { role, text, ts: Date.now() };
-  state.messages.push(msg);
-  saveKeys('messages');
-
+function appendEl(el) {
   const list  = document.getElementById('messageList');
-  const empty = document.getElementById('chatEmpty');
-  empty.style.display = 'none';
-
-  list.appendChild(buildMsgEl(msg));
+  document.getElementById('chatEmpty').style.display = 'none';
+  list.appendChild(el);
   list.scrollTop = list.scrollHeight;
 }
 
-function handleSend() {
+function pushMessage(role, text, kind) {
+  const msg = { role, text, ts: Date.now(), ...(kind ? { kind } : {}) };
+  state.messages.push(msg);
+  saveKeys('messages');
+  appendEl(buildMsgEl(msg));
+}
+
+// ── CONFIRMATION CARDS ────────────────────────────────
+
+function renderConfirmCard(data) {
+  const card = document.createElement('div');
+  card.className = 'confirm-card';
+
+  const title = document.createElement('div');
+  title.className = 'confirm-title';
+  title.textContent = data.title || 'Approve this action?';
+  card.appendChild(title);
+
+  if (data.details) {
+    const details = document.createElement('div');
+    details.className = 'confirm-details';
+    details.textContent = data.details;
+    card.appendChild(details);
+  }
+
+  (data.items || []).forEach(item => {
+    const li = document.createElement('div');
+    li.className = 'confirm-item';
+    li.textContent = `• ${item}`;
+    card.appendChild(li);
+  });
+
+  const row = document.createElement('div');
+  row.className = 'confirm-btn-row';
+
+  const resolve = async (approved) => {
+    row.querySelectorAll('button').forEach(b => { b.disabled = true; });
+    try {
+      const res = await confirmAction(data.confirm_id, approved);
+      const outcome =
+        res.status === 'approved' ? '✓ Approved' :
+        res.status === 'denied'   ? '✗ Denied'   :
+        `⚠ ${res.status} — the action did not run`;
+      card.remove();
+      pushMessage('assistant', `${outcome}: ${data.title || data.action}`, 'activity');
+    } catch (err) {
+      pushMessage('assistant', `⚠ Could not send your answer: ${err.message}`, 'error');
+      row.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    }
+  };
+
+  const approve = document.createElement('button');
+  approve.className = 'confirm-btn approve';
+  approve.textContent = 'Approve';
+  approve.addEventListener('click', () => resolve(true));
+
+  const deny = document.createElement('button');
+  deny.className = 'confirm-btn deny';
+  deny.textContent = 'Deny';
+  deny.addEventListener('click', () => resolve(false));
+
+  row.appendChild(approve);
+  row.appendChild(deny);
+  card.appendChild(row);
+  appendEl(card);
+}
+
+// ── AGENT TURN ────────────────────────────────────────
+
+async function handleSend() {
   const input = document.getElementById('chatInput');
   const text  = input.value.trim();
-  if (!text) return;
-
+  if (!text || state.running) return;
   input.value = '';
-  pushMessage('user', text);
 
-  // Stub assistant response — replace with real API call later
-  setTimeout(() => {
-    pushMessage(
-      'assistant',
-      "AI responses are coming soon! For now, try the Actions tab to capture page context."
-    );
-  }, 500);
+  // Slash commands
+  if (text === '/new') {
+    state.messages = [];
+    state.chatSessionId = null;
+    saveKeys('messages', 'chatSessionId');
+    renderMessages();
+    return;
+  }
+  if (text === '/signout') {
+    await signOut();
+    state.companyId = null;
+    saveKeys('companyId');
+    await refreshAuthState();
+    return;
+  }
+
+  if (!state.signedIn || !state.companyId) {
+    pushMessage('assistant', 'Sign in first — your Helixis account connects the copilot to your data.', 'error');
+    return;
+  }
+
+  pushMessage('user', text);
+  state.running = true;
+  setStatus('Working…', true);
+
+  // Best-effort page context: what the user is looking at right now.
+  // Failure (chrome:// pages, no permission) is silent — the turn
+  // still runs, just without the context block.
+  let context = {};
+  try {
+    const ctx = await captureContext();
+    state.context = ctx;
+    saveKeys('context');
+    context = {
+      current_page_url:   ctx.url,
+      current_page_title: ctx.title,
+      current_page_text:  (ctx.text || '').slice(0, 4000)
+    };
+  } catch { /* no usable tab — proceed without context */ }
+
+  if (!state.chatSessionId) {
+    state.chatSessionId = crypto.randomUUID();
+    saveKeys('chatSessionId');
+  }
+
+  // Live assistant bubble that tokens stream into.
+  let liveText = '';
+  let liveEl = null;
+  let sawTurnTokens = false;   // assistant_message_token supersedes raw token
+  const ensureLive = () => {
+    if (liveEl) return;
+    liveEl = buildMsgEl({ role: 'assistant', text: '' });
+    appendEl(liveEl);
+  };
+  const appendToken = (content) => {
+    if (!content) return;
+    ensureLive();
+    liveText += content;
+    liveEl.querySelector('.message-bubble').textContent = liveText;
+    const list = document.getElementById('messageList');
+    list.scrollTop = list.scrollHeight;
+  };
+  const finalize = (fallback) => {
+    if (!state.running) return;
+    state.running = false;
+    if (liveText) {
+      state.messages.push({ role: 'assistant', text: liveText, ts: Date.now() });
+      saveKeys('messages');
+    } else if (fallback) {
+      if (liveEl) liveEl.remove();
+      pushMessage('assistant', fallback);
+    } else if (liveEl) {
+      liveEl.remove();
+    }
+    setStatus(state.signedIn ? 'Ready' : 'Signed out');
+  };
+
+  await runAgent({
+    task: text,
+    companyId: state.companyId,
+    sessionId: state.chatSessionId,
+    context,
+    onEvent: (ev) => {
+      const d = ev.data || {};
+      switch (ev.type) {
+        case 'assistant_message_token':
+          sawTurnTokens = true;
+          appendToken(d.content);
+          break;
+        case 'token':
+          if (!sawTurnTokens) appendToken(d.content);
+          break;
+        case 'thinking':
+          setStatus('Thinking…', true);
+          break;
+        case 'narration':
+          if (d.content) pushMessage('assistant', d.content, 'activity');
+          break;
+        case 'tool_start':
+          setStatus('Running tools…', true);
+          pushMessage('assistant', `⚙ ${d.tool}${d.description ? ` — ${d.description}` : ''}`, 'activity');
+          break;
+        case 'browser_action':
+          if (d.description) pushMessage('assistant', `🌐 ${d.description}`, 'activity');
+          break;
+        case 'confirm':
+          renderConfirmCard(d);
+          break;
+        case 'error':
+          pushMessage('assistant', `⚠ ${d.message || 'Something went wrong.'}`, 'error');
+          if (!d.recoverable) finalize();
+          break;
+        case 'done':
+          finalize(typeof d.summary === 'string' ? d.summary : undefined);
+          break;
+        default:
+          break; // todo_update, memory_recall, files, chips — not rendered v1
+      }
+    },
+    onError: (err) => {
+      pushMessage('assistant', `⚠ ${err.message}`, 'error');
+      finalize();
+    },
+    onDone: () => finalize()
+  });
 }
 
 // ── REMINDERS ─────────────────────────────────────────
@@ -258,10 +550,10 @@ async function handleReadContext() {
     state.context = ctx;
     saveKeys('context');
     switchTab('chat');
-    pushMessage('assistant', `✓ Captured context from ${ctx.hostname}.`);
+    pushMessage('assistant', `✓ Captured context from ${ctx.hostname}.`, 'activity');
   } catch (err) {
     switchTab('chat');
-    pushMessage('assistant', `⚠ Could not capture page: ${err.message || err}`);
+    pushMessage('assistant', `⚠ Could not capture page: ${err.message || err}`, 'error');
   } finally {
     card.style.pointerEvents = '';
     card.style.opacity = '';
@@ -288,9 +580,8 @@ async function handleRefreshContext() {
     state.context = ctx;
     saveKeys('context');
     renderContext();
-    pushMessage('assistant', `✓ Context refreshed from ${ctx.hostname}.`);
   } catch (err) {
-    pushMessage('assistant', `⚠ Refresh failed: ${err.message || err}`);
+    pushMessage('assistant', `⚠ Refresh failed: ${err.message || err}`, 'error');
   } finally {
     btn.disabled   = false;
     btn.innerHTML  = `
@@ -338,6 +629,14 @@ async function init() {
   document.querySelectorAll('.tab').forEach(tab =>
     tab.addEventListener('click', () => switchTab(tab.dataset.tab))
   );
+
+  // Auth
+  await refreshAuthState();
+  document.getElementById('authSend').addEventListener('click', handleAuthSend);
+  document.getElementById('authVerify').addEventListener('click', handleAuthVerify);
+  document.getElementById('authCode').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); handleAuthVerify(); }
+  });
 
   // Chat
   renderMessages();
