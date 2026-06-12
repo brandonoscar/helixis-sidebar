@@ -205,23 +205,54 @@ function pushMessage(role, text, kind) {
 
 // ── CONFIRMATION CARDS ────────────────────────────────
 
-function renderConfirmCard(data) {
+/**
+ * Normalize the backend's two confirmation event shapes into one.
+ * The /agent/run chat path emits `confirm_gate` (PR #75):
+ *   {confirm_id, summary, payload_preview:{action,items}, confirm_label, cancel_label}
+ * The older `confirm` shape is {confirm_id, action, title, details, items}.
+ * Both resolve via POST /agent/confirm {confirm_id, approved}.
+ */
+function normalizeConfirm(type, d) {
+  if (type === 'confirm_gate') {
+    const preview = d.payload_preview || {};
+    return {
+      confirm_id: d.confirm_id,
+      title: d.summary || preview.action || 'Approve this action?',
+      details: '',
+      items: preview.items || [],
+      approveLabel: d.confirm_label || 'Approve',
+      denyLabel: d.cancel_label || 'Deny'
+    };
+  }
+  return {
+    confirm_id: d.confirm_id,
+    title: d.title || d.action || 'Approve this action?',
+    details: d.details || '',
+    items: d.items || [],
+    approveLabel: 'Approve',
+    denyLabel: 'Deny'
+  };
+}
+
+function renderConfirmCard(c) {
+  if (!c.confirm_id) return; // nothing to resolve against — ignore
+
   const card = document.createElement('div');
   card.className = 'confirm-card';
 
   const title = document.createElement('div');
   title.className = 'confirm-title';
-  title.textContent = data.title || 'Approve this action?';
+  title.textContent = c.title;
   card.appendChild(title);
 
-  if (data.details) {
+  if (c.details) {
     const details = document.createElement('div');
     details.className = 'confirm-details';
-    details.textContent = data.details;
+    details.textContent = c.details;
     card.appendChild(details);
   }
 
-  (data.items || []).forEach(item => {
+  (c.items || []).forEach(item => {
     const li = document.createElement('div');
     li.className = 'confirm-item';
     li.textContent = `• ${item}`;
@@ -234,13 +265,13 @@ function renderConfirmCard(data) {
   const resolve = async (approved) => {
     row.querySelectorAll('button').forEach(b => { b.disabled = true; });
     try {
-      const res = await confirmAction(data.confirm_id, approved);
+      const res = await confirmAction(c.confirm_id, approved);
       const outcome =
         res.status === 'approved' ? '✓ Approved' :
         res.status === 'denied'   ? '✗ Denied'   :
         `⚠ ${res.status} — the action did not run`;
       card.remove();
-      pushMessage('assistant', `${outcome}: ${data.title || data.action}`, 'activity');
+      pushMessage('assistant', `${outcome}: ${c.title}`, 'activity');
     } catch (err) {
       pushMessage('assistant', `⚠ Could not send your answer: ${err.message}`, 'error');
       row.querySelectorAll('button').forEach(b => { b.disabled = false; });
@@ -249,12 +280,12 @@ function renderConfirmCard(data) {
 
   const approve = document.createElement('button');
   approve.className = 'confirm-btn approve';
-  approve.textContent = 'Approve';
+  approve.textContent = c.approveLabel;
   approve.addEventListener('click', () => resolve(true));
 
   const deny = document.createElement('button');
   deny.className = 'confirm-btn deny';
-  deny.textContent = 'Deny';
+  deny.textContent = c.denyLabel;
   deny.addEventListener('click', () => resolve(false));
 
   row.appendChild(approve);
@@ -376,8 +407,9 @@ async function handleSend() {
         case 'browser_action':
           if (d.description) pushMessage('assistant', `🌐 ${d.description}`, 'activity');
           break;
+        case 'confirm_gate':
         case 'confirm':
-          renderConfirmCard(d);
+          renderConfirmCard(normalizeConfirm(ev.type, d));
           break;
         case 'error':
           pushMessage('assistant', `⚠ ${d.message || 'Something went wrong.'}`, 'error');
