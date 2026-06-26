@@ -24,8 +24,19 @@ const state = {
   companyId: null,
   chatSessionId: null,
   signedIn:  false,
-  running:   false
+  running:   false,
+  abort:     null,      // () => void — aborts the in-flight /agent/run stream
+  finalizeTurn: null    // () => void — ends the current turn cleanly
 };
+
+// Send button swaps to a Stop control while a turn is in flight.
+const SEND_ICON =
+  '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">' +
+  '<path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const STOP_ICON =
+  '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">' +
+  '<rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/></svg>';
 
 // ── STORAGE ───────────────────────────────────────────
 
@@ -43,7 +54,14 @@ async function loadState() {
 
 function saveKeys(...keys) {
   const patch = {};
-  keys.forEach(k => { patch[k] = state[k]; });
+  keys.forEach(k => {
+    // Don't persist ephemeral tool-progress lines (⚙ / 🌐 / outcome notes);
+    // otherwise a reload re-renders a wall of stale activity with no live
+    // turn behind it. Keep user messages, final answers, and errors.
+    patch[k] = k === 'messages'
+      ? state.messages.filter(m => m.kind !== 'activity')
+      : state[k];
+  });
   chrome.storage.local.set(patch);
 }
 
@@ -54,6 +72,15 @@ function setStatus(text, busy = false) {
   if (!pill) return;
   pill.lastChild.textContent = ` ${text}`;
   pill.classList.toggle('busy', busy);
+}
+
+/** Toggle the send button between Send and Stop. */
+function setSendMode(running) {
+  const btn = document.getElementById('sendBtn');
+  if (!btn) return;
+  btn.innerHTML = running ? STOP_ICON : SEND_ICON;
+  btn.title = running ? 'Stop' : 'Send';
+  btn.classList.toggle('stopping', running);
 }
 
 // ── TAB SWITCHING ─────────────────────────────────────
@@ -326,6 +353,7 @@ async function handleSend() {
   pushMessage('user', text);
   state.running = true;
   setStatus('Working…', true);
+  setSendMode(true);
 
   // Best-effort page context: what the user is looking at right now.
   // Failure (chrome:// pages, no permission) is silent — the turn
@@ -367,6 +395,8 @@ async function handleSend() {
   const finalize = (fallback) => {
     if (!state.running) return;
     state.running = false;
+    state.abort = null;
+    state.finalizeTurn = null;
     if (liveText) {
       state.messages.push({ role: 'assistant', text: liveText, ts: Date.now() });
       saveKeys('messages');
@@ -377,9 +407,12 @@ async function handleSend() {
       liveEl.remove();
     }
     setStatus(state.signedIn ? 'Ready' : 'Signed out');
+    setSendMode(false);
   };
+  // Exposed so the Stop button can end this turn from outside handleSend.
+  state.finalizeTurn = finalize;
 
-  await runAgent({
+  const controller = await runAgent({
     task: text,
     companyId: state.companyId,
     sessionId: state.chatSessionId,
@@ -428,6 +461,24 @@ async function handleSend() {
     },
     onDone: () => finalize()
   });
+
+  // Capture the abort handle so Stop can cancel the in-flight stream.
+  // Aborting makes the reader throw AbortError (swallowed in agent.js), so
+  // neither onDone nor onError fires — handleStop calls finalize itself.
+  state.abort = () => { try { controller.abort(); } catch { /* already done */ } };
+}
+
+function handleStop() {
+  if (!state.running) return;
+  state.abort?.();
+  pushMessage('assistant', 'Stopped.', 'activity');
+  state.finalizeTurn?.();
+}
+
+/** Send button: starts a turn, or stops the in-flight one. */
+function handleSendClick() {
+  if (state.running) handleStop();
+  else handleSend();
 }
 
 // ── REMINDERS ─────────────────────────────────────────
@@ -672,7 +723,7 @@ async function init() {
 
   // Chat
   renderMessages();
-  document.getElementById('sendBtn').addEventListener('click', handleSend);
+  document.getElementById('sendBtn').addEventListener('click', handleSendClick);
   document.getElementById('chatInput').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   });
