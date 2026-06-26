@@ -54,7 +54,14 @@ async function loadState() {
 
 function saveKeys(...keys) {
   const patch = {};
-  keys.forEach(k => { patch[k] = state[k]; });
+  keys.forEach(k => {
+    // Don't persist ephemeral tool-progress lines (⚙ / 🌐 / outcome notes);
+    // otherwise a reload re-renders a wall of stale activity with no live
+    // turn behind it. Keep user messages, final answers, and errors.
+    patch[k] = k === 'messages'
+      ? state.messages.filter(m => m.kind !== 'activity')
+      : state[k];
+  });
   chrome.storage.local.set(patch);
 }
 
