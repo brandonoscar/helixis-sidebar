@@ -235,9 +235,13 @@ function pushMessage(role, text, kind) {
 /**
  * Normalize the backend's two confirmation event shapes into one.
  * The /agent/run chat path emits `confirm_gate` (PR #75):
- *   {confirm_id, summary, payload_preview:{action,items}, confirm_label, cancel_label}
+ *   {confirm_id, summary, payload_preview:{action,items,request_body?},
+ *    confirm_label, cancel_label}
  * The older `confirm` shape is {confirm_id, action, title, details, items}.
  * Both resolve via POST /agent/confirm {confirm_id, approved}.
+ * `request_body` (additive, AgenticHelixis #704) is the ACTUAL outbound
+ * payload — rendered so the approver sees what will really be sent, not
+ * just the summary. Absent on older backends; the card degrades cleanly.
  */
 function normalizeConfirm(type, d) {
   if (type === 'confirm_gate') {
@@ -247,6 +251,7 @@ function normalizeConfirm(type, d) {
       title: d.summary || preview.action || 'Approve this action?',
       details: '',
       items: preview.items || [],
+      requestBody: preview.request_body || null,
       approveLabel: d.confirm_label || 'Approve',
       denyLabel: d.cancel_label || 'Deny'
     };
@@ -256,6 +261,7 @@ function normalizeConfirm(type, d) {
     title: d.title || d.action || 'Approve this action?',
     details: d.details || '',
     items: d.items || [],
+    requestBody: null,
     approveLabel: 'Approve',
     denyLabel: 'Deny'
   };
@@ -285,6 +291,25 @@ function renderConfirmCard(c) {
     li.textContent = `• ${item}`;
     card.appendChild(li);
   });
+
+  // The ACTUAL outbound payload (additive request_body, AgenticHelixis
+  // #704): collapsed by default, textContent-only so untrusted payload
+  // values can never become markup.
+  if (c.requestBody) {
+    const wrap = document.createElement('details');
+    wrap.className = 'confirm-payload';
+    const label = document.createElement('summary');
+    label.textContent = 'What will be sent';
+    wrap.appendChild(label);
+    const pre = document.createElement('pre');
+    try {
+      pre.textContent = JSON.stringify(c.requestBody, null, 2);
+    } catch {
+      pre.textContent = String(c.requestBody);
+    }
+    wrap.appendChild(pre);
+    card.appendChild(wrap);
+  }
 
   const row = document.createElement('div');
   row.className = 'confirm-btn-row';
