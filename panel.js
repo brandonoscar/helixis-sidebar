@@ -130,7 +130,7 @@ async function refreshAuthState() {
         state.companyId = await bootstrapCompany();
         saveKeys('companyId');
       } catch (err) {
-        pushMessage('assistant', `⚠ Could not reach Helixis: ${err.message}`, 'error');
+        pushMessage('assistant', `⚠ Could not reach Occupella: ${err.message}`, 'error');
       }
     }
   } else {
@@ -371,7 +371,7 @@ async function handleSend() {
   }
 
   if (!state.signedIn || !state.companyId) {
-    pushMessage('assistant', 'Sign in first — your Helixis account connects the copilot to your data.', 'error');
+    pushMessage('assistant', 'Sign in first — your Occupella account connects the copilot to your data.', 'error');
     return;
   }
 
