@@ -1,4 +1,4 @@
-# Helixis Copilot — Chrome side panel
+# Occupella Copilot — Chrome side panel
 
 The agentic copilot surface: a Manifest V3 side panel wired to the
 AgenticHelixis backend. Every chat turn auto-attaches the active tab's
@@ -11,8 +11,8 @@ No build step — vanilla ES modules.
 
 1. `chrome://extensions` → enable **Developer mode**
 2. **Load unpacked** → select this folder
-3. Click the Helixis icon → the side panel opens
-4. Sign in with your Helixis email (6-digit code — same account as
+3. Click the Occupella icon → the side panel opens
+4. Sign in with your Occupella email (6-digit code — same account as
    the web app and onboarding)
 
 ## Architecture
