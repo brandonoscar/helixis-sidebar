@@ -1,7 +1,7 @@
 {
   "name": "Occupella Copilot",
   "description": "Your AI copilot side panel.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "manifest_version": 3,
   "permissions": ["sidePanel", "tabs", "activeTab", "scripting", "storage"],
   "host_permissions": ["<all_urls>"],
@@ -10,6 +10,12 @@
   "action": { "default_title": "Occupella Copilot" },
   "content_scripts": [{
     "matches": ["<all_urls>"],
+    "exclude_matches": [
+      "*://*.managebuilding.com/*",
+      "*://*.rentvine.com/*",
+      "*://*.rentmanager.com/*",
+      "*://*.propertyware.com/*"
+    ],
     "js": ["content.js"],
     "run_at": "document_idle"
   }]
