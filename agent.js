@@ -12,6 +12,7 @@
 
 import { API_URL } from './config.js';
 import { getAccessToken } from './auth.js';
+import { http } from './platform.js';
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -28,7 +29,7 @@ export async function apiFetch(path, options = {}) {
   const headers = { Authorization: `Bearer ${token}`, ...(options.headers ?? {}) };
   if (options.body) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const res = await http(`${API_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try {

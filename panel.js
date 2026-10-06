@@ -13,6 +13,8 @@
 import { configured } from './config.js';
 import { sendOtp, verifyOtp, getAccessToken, getSessionInfo, signOut } from './auth.js';
 import { bootstrapCompany, runAgent, confirmAction } from './agent.js';
+import * as platform from './platform.js';
+import { contextAllowed } from './context-policy.js';
 
 // ── STATE ─────────────────────────────────────────────
 
@@ -26,7 +28,8 @@ const state = {
   signedIn:  false,
   running:   false,
   abort:     null,      // () => void — aborts the in-flight /agent/run stream
-  finalizeTurn: null    // () => void — ends the current turn cleanly
+  finalizeTurn: null,   // () => void — ends the current turn cleanly
+  pendingConfirms: new Set()  // confirm_ids of cards still waiting on the user
 };
 
 // Send button swaps to a Stop control while a turn is in flight.
@@ -41,7 +44,7 @@ const STOP_ICON =
 // ── STORAGE ───────────────────────────────────────────
 
 async function loadState() {
-  const data = await chrome.storage.local.get(
+  const data = await platform.storage.get(
     ['activeTab', 'messages', 'reminders', 'context', 'companyId', 'chatSessionId']
   );
   if (data.activeTab)     state.activeTab     = data.activeTab;
@@ -62,7 +65,7 @@ function saveKeys(...keys) {
       ? state.messages.filter(m => m.kind !== 'activity')
       : state[k];
   });
-  chrome.storage.local.set(patch);
+  platform.storage.set(patch);
 }
 
 // ── HEADER STATUS ─────────────────────────────────────
@@ -187,6 +190,7 @@ function renderMessages() {
   const empty = document.getElementById('chatEmpty');
 
   list.querySelectorAll('.message, .activity-line, .confirm-card').forEach(m => m.remove());
+  setPending([]);
 
   if (state.messages.length === 0) {
     empty.style.display = '';
@@ -323,6 +327,8 @@ function renderConfirmCard(c) {
         res.status === 'denied'   ? '✗ Denied'   :
         `⚠ ${res.status} — the action did not run`;
       card.remove();
+      state.pendingConfirms.delete(c.confirm_id);
+      setPending([...state.pendingConfirms]);
       pushMessage('assistant', `${outcome}: ${c.title}`, 'activity');
     } catch (err) {
       pushMessage('assistant', `⚠ Could not send your answer: ${err.message}`, 'error');
@@ -344,6 +350,19 @@ function renderConfirmCard(c) {
   row.appendChild(deny);
   card.appendChild(row);
   appendEl(card);
+
+  state.pendingConfirms.add(c.confirm_id);
+  setPending([...state.pendingConfirms]);
+  // Native notification on desktop when the window is in the background.
+  // It only points back here: approving always happens on this card, where
+  // the payload is visible.
+  platform.notifyApproval({ id: c.confirm_id, title: c.title });
+}
+
+/** Publish the count of unresolved approval cards to the host's badge. */
+function setPending(ids) {
+  state.pendingConfirms = new Set(ids);
+  platform.setPendingApprovals(state.pendingConfirms.size);
 }
 
 // ── AGENT TURN ────────────────────────────────────────
@@ -393,7 +412,11 @@ async function handleSend() {
       current_page_title: ctx.title,
       current_page_text:  (ctx.text || '').slice(0, 4000)
     };
-  } catch { /* no usable tab — proceed without context */ }
+  } catch (err) {
+    // No usable tab: proceed without context. A PMS screen is skipped on
+    // purpose, so say so once rather than leave the user guessing.
+    if (err?.name === 'ContextBlockedError') pushMessage('assistant', `ⓘ ${err.message}`, 'activity');
+  }
 
   if (!state.chatSessionId) {
     state.chatSessionId = crypto.randomUUID();
@@ -606,42 +629,18 @@ function saveReminder() {
 // ── PAGE CONTEXT CAPTURE ──────────────────────────────
 
 async function captureContext() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) throw new Error('No active tab');
-
-  let payload;
-
-  // Try content script message first (fast, reliable when injected)
-  try {
-    payload = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout')), 1500);
-      chrome.tabs.sendMessage(tab.id, { type: 'HELIXIS_GET_CONTEXT' }, res => {
-        clearTimeout(timer);
-        if (chrome.runtime.lastError || !res) reject(chrome.runtime.lastError ?? new Error('no response'));
-        else resolve(res);
-      });
-    });
-  } catch {
-    // Fallback: executeScript (works on pages loaded before extension install)
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => ({
-        text:  (document.body?.innerText ?? '').slice(0, 5000),
-        title: document.title,
-        url:   location.href
-      })
-    });
-    payload = result?.result;
-  }
+  // contextAllowed runs inside the host BEFORE anything reads the page, so a
+  // property-management screen is never read (context-policy.js says why).
+  const page = await platform.captureActivePage(contextAllowed);
 
   let hostname = '(unknown)';
-  try { hostname = new URL(tab.url).hostname; } catch { hostname = tab.url ?? ''; }
+  try { hostname = new URL(page.url).hostname; } catch { hostname = page.url ?? ''; }
 
   return {
     hostname,
-    title: payload?.title || tab.title || '',
-    text:  payload?.text  || '',
-    url:   payload?.url   || tab.url  || '',
+    title: page.title || '',
+    text:  page.text  || '',
+    url:   page.url   || '',
     ts:    Date.now()
   };
 }

@@ -6,6 +6,7 @@
 // account works across every Helixis surface.
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { storage, http } from './platform.js';
 
 const STORAGE_KEY = 'helixisSession';
 
@@ -14,15 +15,15 @@ let cached = null;
 
 async function loadSession() {
   if (cached) return cached;
-  const data = await chrome.storage.local.get(STORAGE_KEY);
+  const data = await storage.get(STORAGE_KEY);
   cached = data[STORAGE_KEY] ?? null;
   return cached;
 }
 
 async function saveSession(session) {
   cached = session;
-  if (session) await chrome.storage.local.set({ [STORAGE_KEY]: session });
-  else await chrome.storage.local.remove(STORAGE_KEY);
+  if (session) await storage.set({ [STORAGE_KEY]: session });
+  else await storage.remove(STORAGE_KEY);
 }
 
 function gotrueHeaders() {
@@ -45,7 +46,7 @@ function toSession(payload, email) {
 
 /** Request a 6-digit email code. */
 export async function sendOtp(email) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+  const res = await http(`${SUPABASE_URL}/auth/v1/otp`, {
     method: 'POST',
     headers: gotrueHeaders(),
     body: JSON.stringify({ email, create_user: true }),
@@ -58,7 +59,7 @@ export async function sendOtp(email) {
 
 /** Exchange the emailed code for a session. */
 export async function verifyOtp(email, code) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+  const res = await http(`${SUPABASE_URL}/auth/v1/verify`, {
     method: 'POST',
     headers: gotrueHeaders(),
     body: JSON.stringify({ type: 'email', email, token: code }),
@@ -73,7 +74,7 @@ export async function verifyOtp(email, code) {
 }
 
 async function refresh(session) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+  const res = await http(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
     method: 'POST',
     headers: gotrueHeaders(),
     body: JSON.stringify({ refresh_token: session.refresh_token }),

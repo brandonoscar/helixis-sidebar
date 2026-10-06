@@ -22,8 +22,36 @@ config.js          backend + Supabase endpoints (anon key baked in)
 auth.js            GoTrue REST auth: OTP sign-in, refresh, storage
 agent.js           /api/v1/agent/run SSE client + /agent/confirm + bootstrap
 panel.js           UI: chat / reminders / actions / context tabs
+platform.js        host seam: storage, network, active-page capture, badge
+context-policy.js  pages the copilot never reads (PMS screens)
 content.js         page-context capture (responds to panel requests)
 service_worker.js  opens the panel on action click
+```
+
+### One panel, two hosts
+
+The Occupella desktop browser (`helixiselectron`) ships these same panel
+files as its built-in copilot. Only `platform.js` differs: the desktop copy
+talks to the Electron main process instead of `chrome.*`. So:
+
+- Never call `chrome.*` or `fetch` from `panel.js`, `auth.js` or `agent.js`.
+  Add what you need to `platform.js` here AND to the desktop copy
+  (`helixiselectron/resources/copilot/platform.js`), with the same exports.
+- After changing panel files, re-sync the desktop copy:
+  `node scripts/sync-copilot.mjs ../helixis-sidebar` from `helixiselectron`.
+
+### PMS screens are never read
+
+`context-policy.js` lists the property-management systems whose screens the
+copilot never reads (Buildium, Rentvine, Rent Manager, Propertyware). Their
+terms allow the documented API only, so PMS data reaches Occupella through the
+backend's API connection. The check runs before any script touches the page,
+and the content script is excluded from those hosts in `manifest.json`.
+
+## Tests
+
+```bash
+node --test tests/*.test.mjs
 ```
 
 Auth note: `SUPABASE_URL` must be the same project the backend
